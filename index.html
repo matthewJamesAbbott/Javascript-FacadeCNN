@@ -1,0 +1,1922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CNN Trainer with Facade</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2rem; background: #fafafa; }
+        .section { margin-bottom: 2rem; border-bottom: 1px solid #ccc; padding-bottom: 1rem; background: #fff; padding: 1rem; border-radius: 8px; }
+        label { display: block; margin-top: 0.5rem; }
+        input, select, textarea, button { margin: 0.5rem 0; }
+        button { padding: 8px 16px; cursor: pointer; background: #4285f4; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #3367d6; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .inline { display: inline-block; margin-right: 1rem; }
+        .results { background-color: #f5f5f5; padding: 1rem; margin: 1rem 0; border-radius: 5px; }
+        .metric { margin: 0.5rem 0; font-weight: bold; }
+        table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        .facade-section { background-color: #e8f4f8; padding: 1rem; border-radius: 5px; margin: 1rem 0; }
+        .facade-controls { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.5rem; margin-bottom: 1rem; }
+        .facade-output { background-color: #fff; border: 1px solid #ccc; padding: 0.5rem; margin-top: 0.5rem; font-family: monospace; white-space: pre-wrap; max-height: 300px; overflow-y: auto; }
+        .histogram-container { display: flex; align-items: flex-end; height: 100px; border: 1px solid #ccc; margin: 0.5rem 0; background: #fff; }
+        .histogram-bar { background-color: #4CAF50; flex: 1; margin: 0 1px; }
+        .canvas-container { display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-start; }
+        canvas { border: 1px solid #ccc; background: #fff; }
+        .progress-bar { width: 100%; height: 20px; background: #e0e0e0; border-radius: 10px; overflow: hidden; margin: 0.5rem 0; }
+        .progress-fill { height: 100%; background: #4285f4; transition: width 0.3s; }
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin: 1rem 0; }
+        .metric-card { background: #f0f0f0; padding: 1rem; border-radius: 8px; text-align: center; }
+        .metric-value { font-size: 1.5rem; font-weight: bold; color: #333; }
+        .metric-label { font-size: 0.9rem; color: #666; }
+        .visualization-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(60px, 1fr)); gap: 0.5rem; margin: 1rem 0; }
+        .filter-viz { text-align: center; }
+        .filter-viz canvas { display: block; margin: 0 auto; }
+        .filter-viz span { font-size: 10px; color: #666; }
+        #trainingLog { max-height: 200px; overflow-y: auto; background: #333; color: #0f0; padding: 1rem; font-family: monospace; font-size: 12px; border-radius: 4px; }
+        h3 { margin-top: 1rem; margin-bottom: 0.5rem; color: #333; border-bottom: 1px solid #ddd; padding-bottom: 0.25rem; }
+    </style>
+</head>
+<body>
+<h1>🧠 CNN Trainer with Facade API</h1>
+
+<!-- Network Configuration -->
+<div class="section">
+    <h2>Network Configuration</h2>
+    <div class="inline"><label>Image Width: <input type="number" id="imgWidth" value="28" min="1"></label></div>
+    <div class="inline"><label>Image Height: <input type="number" id="imgHeight" value="28" min="1"></label></div>
+    <div class="inline"><label>Channels: <input type="number" id="imgChannels" value="1" min="1" max="3"></label></div>
+    <br>
+    <div class="inline"><label>Conv Filters: <input type="text" id="convFilters" value="8,16" style="width:100px"></label></div>
+    <div class="inline"><label>Kernel Sizes: <input type="text" id="kernelSizes" value="3,3" style="width:100px"></label></div>
+    <div class="inline"><label>Pool Sizes: <input type="text" id="poolSizes" value="2,2" style="width:100px"></label></div>
+    <div class="inline"><label>FC Sizes: <input type="text" id="fcSizes" value="64" style="width:100px"></label></div>
+    <div class="inline"><label>Output Classes: <input type="number" id="outputSize" value="10" min="1"></label></div>
+    <br>
+    <div class="inline"><label>Learning Rate: <input type="number" id="learningRate" value="0.001" step="0.0001" min="0.0001"></label></div>
+    <div class="inline"><label>Dropout Rate: <input type="number" id="dropoutRate" value="0.25" step="0.05" min="0" max="0.9"></label></div>
+    <div class="inline"><label>Optimizer: <select id="optimizer"><option value="sgd">SGD</option><option value="adam" selected>Adam</option></select></label></div>
+    <br><br>
+    <button onclick="createNetwork()">Create Network</button>
+    <button onclick="saveModel()">Save Model</button>
+    <button onclick="loadModel()">Load Model</button>
+    <span id="networkStatus" style="margin-left:1rem;"></span>
+</div>
+
+<!-- Dataset -->
+<div class="section">
+    <h2>Dataset</h2>
+    <div class="inline">
+        <button onclick="generateSyntheticDataset()">Generate Synthetic Dataset</button>
+        <label>Samples/class: <input type="number" id="samplesPerClass" value="50" min="10" style="width:60px"></label>
+    </div>
+    <div id="datasetInfo" style="margin-top:0.5rem;"></div>
+    <div class="canvas-container">
+        <div><h4>Dataset Preview</h4><canvas id="datasetPreview" width="200" height="200"></canvas></div>
+        <div><h4>Input Image</h4><canvas id="inputCanvas" width="140" height="140"></canvas></div>
+    </div>
+</div>
+
+<!-- Training -->
+<div class="section">
+    <h2>Training</h2>
+    <div class="inline"><label>Epochs: <input type="number" id="trainEpochs" value="10" min="1"></label></div>
+    <div class="inline"><label>Batch Size: <input type="number" id="batchSize" value="16" min="1"></label></div>
+    <button onclick="trainOnDataset()" id="trainBtn">Train</button>
+    <button onclick="stopTraining()" id="stopBtn" disabled>Stop</button>
+    <div class="progress-bar"><div class="progress-fill" id="trainProgress" style="width:0%"></div></div>
+    <div id="trainStatus"></div>
+    <div id="trainingLog"></div>
+</div>
+
+<!-- Evaluation -->
+<div class="section">
+    <h2>Evaluation</h2>
+    <button onclick="evaluateModel()">Evaluate</button>
+    <button onclick="predictSingleImage()">Predict Current Image</button>
+    <button onclick="randomizeImage()">Randomize Image</button>
+    <div class="metrics-grid" id="metricsGrid"></div>
+    <div id="predictionResult"></div>
+</div>
+
+<!-- Facade API Explorer -->
+<div class="section facade-section">
+    <h2>🔧 CNN Facade API Explorer</h2>
+    <p>Inspect and modify CNN internals:</p>
+    
+    <div class="facade-controls">
+        <label>Layer Index: <input type="number" id="facadeLayerIdx" value="0" min="0" style="width:50px"></label>
+        <label>Filter Index: <input type="number" id="facadeFilterIdx" value="0" min="0" style="width:50px"></label>
+        <label>Channel Index: <input type="number" id="facadeChannelIdx" value="0" min="0" style="width:50px"></label>
+        <label>Y Position: <input type="number" id="facadeY" value="0" min="0" style="width:50px"></label>
+        <label>X Position: <input type="number" id="facadeX" value="0" min="0" style="width:50px"></label>
+        <label>Value: <input type="number" id="facadeValue" value="0" step="0.1" style="width:60px"></label>
+        <label>Num Bins: <input type="number" id="facadeNumBins" value="20" min="5" style="width:50px"></label>
+        <label>Attr Key: <input type="text" id="facadeAttrKey" value="tag" style="width:60px"></label>
+        <label>Attr Value: <input type="text" id="facadeAttrValue" value="important" style="width:80px"></label>
+    </div>
+
+    <h3>1. Feature Map Access</h3>
+    <button onclick="facadeGetFeatureMap()">Get Feature Map</button>
+    <button onclick="facadeSetFeatureMap()">Set Feature Map (zeros)</button>
+    <button onclick="facadeVisualizeFeatureMap()">Visualize Feature Map</button>
+
+    <h3>2. Pre-Activation Access</h3>
+    <button onclick="facadeGetPreActivation()">Get Pre-Activation</button>
+    <button onclick="facadeSetPreActivation()">Set Pre-Activation</button>
+
+    <h3>3. Kernel/Filter Access</h3>
+    <button onclick="facadeGetKernel()">Get Kernel</button>
+    <button onclick="facadeSetKernel()">Set Kernel (random)</button>
+    <button onclick="facadeGetBias()">Get Bias</button>
+    <button onclick="facadeSetBias()">Set Bias</button>
+    <button onclick="facadeVisualizeKernels()">Visualize All Kernels</button>
+
+    <h3>4. Batch Activations</h3>
+    <button onclick="facadeGetBatchActivations()">Get Batch Activations</button>
+    <button onclick="facadeSetBatchActivations()">Set Batch Activations</button>
+
+    <h3>5. Pooling & Dropout</h3>
+    <button onclick="facadeGetPoolingIndices()">Get Pooling Indices</button>
+    <button onclick="facadeGetDropoutMask()">Get Dropout Mask</button>
+    <button onclick="facadeSetDropoutMask()">Set Dropout Mask (all 1s)</button>
+
+    <h3>6. Gradients & Optimizer</h3>
+    <button onclick="facadeGetFilterGradient()">Get Filter Gradient</button>
+    <button onclick="facadeGetBiasGradient()">Get Bias Gradient</button>
+    <button onclick="facadeGetActivationGradient()">Get Activation Gradient</button>
+    <button onclick="facadeGetOptimizerState()">Get Optimizer State</button>
+
+    <h3>7. Flattened Features</h3>
+    <button onclick="facadeGetFlattenedFeatures()">Get Flattened Features</button>
+    <button onclick="facadeSetFlattenedFeatures()">Set Flattened Features</button>
+
+    <h3>8. Output Layer</h3>
+    <button onclick="facadeGetLogits()">Get Logits</button>
+    <button onclick="facadeGetSoftmax()">Get Softmax</button>
+
+    <h3>9. Layer Config</h3>
+    <button onclick="facadeGetLayerConfig()">Get Layer Config</button>
+    <button onclick="facadeGetNumLayers()">Get Num Layers</button>
+    <button onclick="facadeGetNumConvLayers()">Get Num Conv Layers</button>
+    <button onclick="facadeGetNumFCLayers()">Get Num FC Layers</button>
+    <button onclick="facadeGetNumFilters()">Get Num Filters</button>
+
+    <h3>10. Visualization</h3>
+    <button onclick="facadeGetSaliencyMap()">Get Saliency Map</button>
+    <button onclick="facadeGetDeconv()">Get Deconv</button>
+    <button onclick="facadeVisualizeSaliency()">Visualize Saliency</button>
+
+    <h3>11. Structural Mutations</h3>
+    <button onclick="facadeAddFilter()">Add Filter</button>
+    <button onclick="facadeRemoveFilter()">Remove Filter</button>
+    <button onclick="facadeAddConvLayer()">Add Conv Layer</button>
+    <button onclick="facadeRemoveLayer()">Remove Layer</button>
+
+    <h3>12. Statistics</h3>
+    <button onclick="facadeGetLayerStats()">Get Layer Stats</button>
+    <button onclick="facadeGetActivationHistogram()">Activation Histogram</button>
+    <button onclick="facadeGetWeightHistogram()">Weight Histogram</button>
+    <div id="histogramDisplay"></div>
+
+    <h3>13. Receptive Field</h3>
+    <button onclick="facadeGetReceptiveField()">Get Receptive Field</button>
+
+    <h3>14. Batch Norm</h3>
+    <button onclick="facadeGetBatchNormParams()">Get BatchNorm Params</button>
+    <button onclick="facadeSetBatchNormParams()">Set BatchNorm Params</button>
+
+    <h3>15. Attributes</h3>
+    <button onclick="facadeSetFilterAttribute()">Set Filter Attribute</button>
+    <button onclick="facadeGetFilterAttribute()">Get Filter Attribute</button>
+
+    <h3>Output</h3>
+    <div id="facadeOutput" class="facade-output">Facade output will appear here...</div>
+    <div id="facadeViz" class="visualization-grid"></div>
+</div>
+
+<script>
+// ============== CNNFacade Class (embedded) ==============
+</script>
+<script>class CNNFacade {
+    constructor(inputWidth, inputHeight, channels, convFilters, kernelSizes, poolSizes, fcSizes, outputSize, learningRate = 0.001, dropoutRate = 0.25, optimizer = 'adam') {
+        this.inputWidth = inputWidth;
+        this.inputHeight = inputHeight;
+        this.channels = channels;
+        this.convFilters = convFilters;
+        this.kernelSizes = kernelSizes;
+        this.poolSizes = poolSizes;
+        this.fcSizes = fcSizes;
+        this.outputSize = outputSize;
+        this.learningRate = learningRate;
+        this.dropoutRate = dropoutRate;
+        this.optimizer = optimizer;
+        this.training = false;
+        this.beta1 = 0.9;
+        this.beta2 = 0.999;
+        this.epsilon = 1e-8;
+        this.t = 0;
+
+        this.batchActivations = [];
+        this.batchNormParams = [];
+        this.filterAttributes = [];
+
+        this.initLayers();
+    }
+
+    // ==================== Layer Initialization ====================
+
+    initLayers() {
+        this.convLayers = [];
+        this.poolLayers = [];
+        let currWidth = this.inputWidth;
+        let currHeight = this.inputHeight;
+        let currChannels = this.channels;
+
+        for (let i = 0; i < this.convFilters.length; i++) {
+            let kernel = this.kernelSizes[i];
+            let filters = this.convFilters[i];
+            let padding = Math.floor(kernel / 2);
+            this.convLayers.push(this.initConvLayer(filters, currChannels, kernel, padding));
+            currWidth = Math.floor((currWidth - kernel + 2 * padding) / 1 + 1);
+            currHeight = Math.floor((currHeight - kernel + 2 * padding) / 1 + 1);
+            currChannels = filters;
+
+            if (i < this.poolSizes.length) {
+                let pool = this.poolSizes[i];
+                this.poolLayers.push(this.initPoolLayer(pool));
+                currWidth = Math.floor(currWidth / pool);
+                currHeight = Math.floor(currHeight / pool);
+            }
+        }
+
+        this.flattenedSize = currWidth * currHeight * currChannels;
+        this.lastConvShape = { channels: currChannels, height: currHeight, width: currWidth };
+
+        this.fcLayers = [];
+        let numInputs = this.flattenedSize;
+
+        for (let sz of this.fcSizes) {
+            this.fcLayers.push(this.initFCLayer(sz, numInputs));
+            numInputs = sz;
+        }
+        this.outputLayer = this.initFCLayer(this.outputSize, numInputs);
+    }
+
+    initConvLayer(numFilters, inChannels, kernel, padding) {
+        let filters = [];
+        let scale = Math.sqrt(2.0 / (inChannels * kernel * kernel));
+        for (let i = 0; i < numFilters; i++) {
+            let w = [], m = [], v = [], grads = [];
+            for (let c = 0; c < inChannels; c++) {
+                let k = [], km = [], kv = [], kg = [];
+                for (let h = 0; h < kernel; h++) {
+                    let row = [], rm = [], rv = [], rg = [];
+                    for (let wIdx = 0; wIdx < kernel; wIdx++) {
+                        row.push((Math.random() - 0.5) * scale);
+                        rm.push(0); rv.push(0); rg.push(0);
+                    }
+                    k.push(row); km.push(rm); kv.push(rv); kg.push(rg);
+                }
+                w.push(k); m.push(km); v.push(kv); grads.push(kg);
+            }
+            filters.push({ weights: w, bias: 0, biasM: 0, biasV: 0, biasGrad: 0, m, v, grads });
+        }
+        return { filters, stride: 1, padding, kernel, inChannels, output: null, input: null, preAct: null, paddedInput: null };
+    }
+
+    initPoolLayer(poolSize) {
+        return { poolSize, output: null, input: null, maxIndices: null };
+    }
+
+    initFCLayer(numNeurons, numInputs) {
+        let neurons = [];
+        let scale = Math.sqrt(2.0 / numInputs);
+        for (let i = 0; i < numNeurons; i++) {
+            let weights = [], m = [], v = [];
+            for (let j = 0; j < numInputs; j++) {
+                weights.push((Math.random() - 0.5) * scale);
+                m.push(0); v.push(0);
+            }
+            neurons.push({ weights, bias: 0, biasM: 0, biasV: 0, m, v, output: 0, preAct: 0, error: 0, dropoutMask: 1 });
+        }
+        return { neurons, input: null };
+    }
+
+    // ==================== Utility Functions ====================
+
+    relu(x) { return Math.max(0, x); }
+    reluD(x) { return x > 0 ? 1 : 0; }
+    clamp(x, min, max) { return Math.max(min, Math.min(max, x)); }
+    isFiniteNum(x) { return typeof x === 'number' && isFinite(x) && !isNaN(x); }
+
+    softmax(arr) {
+        let max = -Infinity;
+        for (let i = 0; i < arr.length; i++) {
+            if (this.isFiniteNum(arr[i]) && arr[i] > max) max = arr[i];
+        }
+        if (!this.isFiniteNum(max)) max = 0;
+
+        let exps = [], sum = 0;
+        for (let i = 0; i < arr.length; i++) {
+            let val = this.isFiniteNum(arr[i]) ? arr[i] : 0;
+            let e = Math.exp(this.clamp(val - max, -500, 500));
+            exps.push(e);
+            sum += e;
+        }
+        if (sum <= 0 || !this.isFiniteNum(sum)) sum = 1;
+
+        return exps.map(e => this.clamp(e / sum, 1e-15, 1 - 1e-15));
+    }
+
+    crossEntropyLoss(predicted, target) {
+        let loss = 0;
+        for (let i = 0; i < target.length; i++) {
+            let p = this.clamp(predicted[i], 1e-15, 1 - 1e-15);
+            if (target[i] > 0) loss -= target[i] * Math.log(p);
+        }
+        return this.isFiniteNum(loss) ? loss : 0;
+    }
+
+    pad3D(input, padding) {
+        if (padding === 0) return input;
+        let channels = input.length, h = input[0].length, w = input[0][0].length;
+        let padded = [];
+        for (let c = 0; c < channels; c++) {
+            let chan = [];
+            for (let i = 0; i < h + 2 * padding; i++) {
+                let row = [];
+                for (let j = 0; j < w + 2 * padding; j++) {
+                    let srcI = i - padding, srcJ = j - padding;
+                    row.push((srcI >= 0 && srcI < h && srcJ >= 0 && srcJ < w) ? input[c][srcI][srcJ] : 0);
+                }
+                chan.push(row);
+            }
+            padded.push(chan);
+        }
+        return padded;
+    }
+
+    applyDropout(layer) {
+        if (!this.training || this.dropoutRate <= 0) {
+            for (let n of layer.neurons) n.dropoutMask = 1;
+            return;
+        }
+        for (let n of layer.neurons) {
+            n.dropoutMask = Math.random() > this.dropoutRate ? 1 / (1 - this.dropoutRate) : 0;
+        }
+    }
+
+    // ==================== Forward Pass ====================
+
+    convForward(layer, input, inWidth, inHeight) {
+        let paddedInput = this.pad3D(input, layer.padding);
+        layer.input = input;
+        layer.paddedInput = paddedInput;
+
+        let kernel = layer.kernel;
+        let outWidth = Math.floor((inWidth + 2 * layer.padding - kernel) / layer.stride + 1);
+        let outHeight = Math.floor((inHeight + 2 * layer.padding - kernel) / layer.stride + 1);
+
+        let outputMaps = [], preActMaps = [];
+
+        for (let f = 0; f < layer.filters.length; f++) {
+            let map = [], preMap = [];
+            for (let h = 0; h < outHeight; h++) {
+                let row = [], preRow = [];
+                for (let w = 0; w < outWidth; w++) {
+                    let sum = layer.filters[f].bias;
+                    for (let c = 0; c < layer.inChannels; c++) {
+                        for (let kh = 0; kh < kernel; kh++) {
+                            for (let kw = 0; kw < kernel; kw++) {
+                                let inH = h * layer.stride + kh;
+                                let inW = w * layer.stride + kw;
+                                sum += paddedInput[c][inH][inW] * layer.filters[f].weights[c][kh][kw];
+                            }
+                        }
+                    }
+                    sum = this.isFiniteNum(sum) ? sum : 0;
+                    preRow.push(sum);
+                    row.push(this.relu(sum));
+                }
+                preMap.push(preRow);
+                map.push(row);
+            }
+            preActMaps.push(preMap);
+            outputMaps.push(map);
+        }
+
+        layer.preAct = preActMaps;
+        layer.output = outputMaps;
+        return outputMaps;
+    }
+
+    poolForward(layer, input, inWidth, inHeight) {
+        layer.input = input;
+        let outputMaps = [], maxIndices = [];
+        let outWidth = Math.floor(inWidth / layer.poolSize);
+        let outHeight = Math.floor(inHeight / layer.poolSize);
+
+        for (let c = 0; c < input.length; c++) {
+            let map = [], indices = [];
+            for (let h = 0; h < outHeight; h++) {
+                let row = [], idxRow = [];
+                for (let w = 0; w < outWidth; w++) {
+                    let maxVal = -Infinity, maxIdx = { ph: 0, pw: 0 };
+                    for (let ph = 0; ph < layer.poolSize; ph++) {
+                        for (let pw = 0; pw < layer.poolSize; pw++) {
+                            let val = input[c][h * layer.poolSize + ph][w * layer.poolSize + pw];
+                            if (val > maxVal) { maxVal = val; maxIdx = { ph, pw }; }
+                        }
+                    }
+                    row.push(maxVal);
+                    idxRow.push(maxIdx);
+                }
+                map.push(row);
+                indices.push(idxRow);
+            }
+            outputMaps.push(map);
+            maxIndices.push(indices);
+        }
+
+        layer.output = outputMaps;
+        layer.maxIndices = maxIndices;
+        return outputMaps;
+    }
+
+    flattenFeatures(input) {
+        let arr = [];
+        for (let c = 0; c < input.length; c++)
+            for (let h = 0; h < input[c].length; h++)
+                for (let w = 0; w < input[c][h].length; w++)
+                    arr.push(input[c][h][w]);
+        this.flattenedFeatures = arr;
+        this.lastConvShape = { channels: input.length, height: input[0].length, width: input[0][0].length };
+        return arr;
+    }
+
+    fcForward(layer, input) {
+        layer.input = input.slice();
+        this.applyDropout(layer);
+        let outputs = [];
+        for (let n of layer.neurons) {
+            let sum = n.bias;
+            for (let j = 0; j < input.length; j++) sum += input[j] * n.weights[j];
+            sum = this.isFiniteNum(sum) ? sum : 0;
+            n.preAct = sum;
+            n.output = this.relu(sum) * n.dropoutMask;
+            outputs.push(n.output);
+        }
+        return outputs;
+    }
+
+    forward(imageObj, training = false) {
+        this.training = training;
+        let { data, width, height } = imageObj;
+        let currentOutput = data;
+        let currWidth = width, currHeight = height;
+
+        for (let i = 0; i < this.convLayers.length; i++) {
+            currentOutput = this.convForward(this.convLayers[i], currentOutput, currWidth, currHeight);
+            currWidth = currentOutput[0][0].length;
+            currHeight = currentOutput[0].length;
+            if (i < this.poolLayers.length) {
+                currentOutput = this.poolForward(this.poolLayers[i], currentOutput, currWidth, currHeight);
+                currWidth = currentOutput[0][0].length;
+                currHeight = currentOutput[0].length;
+            }
+        }
+
+        let flat = this.flattenFeatures(currentOutput);
+        let layerInput = flat;
+
+        for (let fcl of this.fcLayers) layerInput = this.fcForward(fcl, layerInput);
+
+        this.outputLayer.input = layerInput.slice();
+        let logits = [];
+        for (let n of this.outputLayer.neurons) {
+            let sum = n.bias;
+            for (let j = 0; j < layerInput.length; j++) sum += layerInput[j] * n.weights[j];
+            sum = this.isFiniteNum(sum) ? sum : 0;
+            n.preAct = sum;
+            logits.push(sum);
+        }
+
+        let probs = this.softmax(logits);
+        for (let i = 0; i < this.outputLayer.neurons.length; i++) {
+            this.outputLayer.neurons[i].output = probs[i];
+        }
+        return probs;
+    }
+
+    predict(imageObj) {
+        return this.forward(imageObj, false);
+    }
+
+    // ==================== Backward Pass ====================
+
+    unflattenGradient(grad) {
+        let { channels, height, width } = this.lastConvShape;
+        let result = [], idx = 0;
+        for (let c = 0; c < channels; c++) {
+            let chan = [];
+            for (let h = 0; h < height; h++) {
+                let row = [];
+                for (let w = 0; w < width; w++) row.push(grad[idx++]);
+                chan.push(row);
+            }
+            result.push(chan);
+        }
+        return result;
+    }
+
+    fcBackward(layer, grad, isOutputLayer) {
+        let inputGrad = new Array(layer.input.length).fill(0);
+        for (let i = 0; i < layer.neurons.length; i++) {
+            let n = layer.neurons[i];
+            let delta = isOutputLayer ? grad[i] : grad[i] * this.reluD(n.preAct) * n.dropoutMask;
+            n.error = delta;
+            for (let j = 0; j < n.weights.length; j++) {
+                inputGrad[j] += delta * n.weights[j];
+            }
+        }
+        return inputGrad;
+    }
+
+    poolBackward(layer, grad) {
+        let result = [];
+        for (let c = 0; c < layer.input.length; c++) {
+            let chan = [];
+            for (let h = 0; h < layer.input[c].length; h++) {
+                chan.push(new Array(layer.input[c][h].length).fill(0));
+            }
+            result.push(chan);
+        }
+
+        for (let c = 0; c < grad.length; c++) {
+            for (let h = 0; h < grad[c].length; h++) {
+                for (let w = 0; w < grad[c][h].length; w++) {
+                    let idx = layer.maxIndices[c][h][w];
+                    let srcH = h * layer.poolSize + idx.ph;
+                    let srcW = w * layer.poolSize + idx.pw;
+                    result[c][srcH][srcW] = grad[c][h][w];
+                }
+            }
+        }
+        return result;
+    }
+
+    convBackward(layer, grad) {
+        let kernel = layer.kernel;
+        let gradWithReLU = [];
+
+        for (let f = 0; f < grad.length; f++) {
+            let fGrad = [];
+            for (let h = 0; h < grad[f].length; h++) {
+                let row = [];
+                for (let w = 0; w < grad[f][h].length; w++) {
+                    row.push(grad[f][h][w] * this.reluD(layer.preAct[f][h][w]));
+                }
+                fGrad.push(row);
+            }
+            gradWithReLU.push(fGrad);
+        }
+
+        for (let f = 0; f < layer.filters.length; f++) {
+            let biasGrad = 0;
+            for (let h = 0; h < gradWithReLU[f].length; h++)
+                for (let w = 0; w < gradWithReLU[f][h].length; w++)
+                    biasGrad += gradWithReLU[f][h][w];
+            layer.filters[f].biasGrad = biasGrad;
+
+            for (let c = 0; c < layer.inChannels; c++) {
+                for (let kh = 0; kh < kernel; kh++) {
+                    for (let kw = 0; kw < kernel; kw++) {
+                        let wGrad = 0;
+                        for (let h = 0; h < gradWithReLU[f].length; h++) {
+                            for (let w = 0; w < gradWithReLU[f][h].length; w++) {
+                                let inH = h * layer.stride + kh;
+                                let inW = w * layer.stride + kw;
+                                wGrad += gradWithReLU[f][h][w] * layer.paddedInput[c][inH][inW];
+                            }
+                        }
+                        layer.filters[f].grads[c][kh][kw] = wGrad;
+                    }
+                }
+            }
+        }
+
+        let inputGrad = [];
+        for (let c = 0; c < layer.inChannels; c++) {
+            let chan = [];
+            for (let h = 0; h < layer.input[0].length; h++) {
+                chan.push(new Array(layer.input[0][0].length).fill(0));
+            }
+            inputGrad.push(chan);
+        }
+
+        for (let f = 0; f < layer.filters.length; f++) {
+            for (let h = 0; h < gradWithReLU[f].length; h++) {
+                for (let w = 0; w < gradWithReLU[f][h].length; w++) {
+                    for (let c = 0; c < layer.inChannels; c++) {
+                        for (let kh = 0; kh < kernel; kh++) {
+                            for (let kw = 0; kw < kernel; kw++) {
+                                let inH = h * layer.stride + kh - layer.padding;
+                                let inW = w * layer.stride + kw - layer.padding;
+                                if (inH >= 0 && inH < inputGrad[c].length && inW >= 0 && inW < inputGrad[c][0].length) {
+                                    inputGrad[c][inH][inW] += gradWithReLU[f][h][w] * layer.filters[f].weights[c][kh][kw];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return inputGrad;
+    }
+
+    backward(target) {
+        let outputGrad = [];
+        for (let i = 0; i < this.outputLayer.neurons.length; i++) {
+            outputGrad.push(this.outputLayer.neurons[i].output - target[i]);
+        }
+
+        let fcGrad = this.fcBackward(this.outputLayer, outputGrad, true);
+
+        for (let i = this.fcLayers.length - 1; i >= 0; i--) {
+            fcGrad = this.fcBackward(this.fcLayers[i], fcGrad, false);
+        }
+
+        let convGrad = this.unflattenGradient(fcGrad);
+
+        for (let i = this.convLayers.length - 1; i >= 0; i--) {
+            if (i < this.poolLayers.length) {
+                convGrad = this.poolBackward(this.poolLayers[i], convGrad);
+            }
+            convGrad = this.convBackward(this.convLayers[i], convGrad);
+        }
+    }
+
+    updateWeights() {
+        this.t++;
+        const clipGrad = (g) => this.isFiniteNum(g) ? this.clamp(g, -1, 1) : 0;
+
+        for (let layer of this.convLayers) {
+            for (let f of layer.filters) {
+                let g = clipGrad(f.biasGrad);
+                if (this.optimizer === 'adam') {
+                    f.biasM = this.beta1 * f.biasM + (1 - this.beta1) * g;
+                    f.biasV = this.beta2 * f.biasV + (1 - this.beta2) * g * g;
+                    let mHat = f.biasM / (1 - Math.pow(this.beta1, this.t));
+                    let vHat = f.biasV / (1 - Math.pow(this.beta2, this.t));
+                    f.bias -= this.learningRate * mHat / (Math.sqrt(vHat) + this.epsilon);
+                } else {
+                    f.bias -= this.learningRate * g;
+                }
+
+                for (let c = 0; c < f.weights.length; c++) {
+                    for (let kh = 0; kh < f.weights[c].length; kh++) {
+                        for (let kw = 0; kw < f.weights[c][kh].length; kw++) {
+                            g = clipGrad(f.grads[c][kh][kw]);
+                            if (this.optimizer === 'adam') {
+                                f.m[c][kh][kw] = this.beta1 * f.m[c][kh][kw] + (1 - this.beta1) * g;
+                                f.v[c][kh][kw] = this.beta2 * f.v[c][kh][kw] + (1 - this.beta2) * g * g;
+                                let mHat = f.m[c][kh][kw] / (1 - Math.pow(this.beta1, this.t));
+                                let vHat = f.v[c][kh][kw] / (1 - Math.pow(this.beta2, this.t));
+                                f.weights[c][kh][kw] -= this.learningRate * mHat / (Math.sqrt(vHat) + this.epsilon);
+                            } else {
+                                f.weights[c][kh][kw] -= this.learningRate * g;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for (let layer of [...this.fcLayers, this.outputLayer]) {
+            for (let n of layer.neurons) {
+                for (let j = 0; j < n.weights.length; j++) {
+                    let g = clipGrad(n.error * layer.input[j]);
+                    if (this.optimizer === 'adam') {
+                        n.m[j] = this.beta1 * n.m[j] + (1 - this.beta1) * g;
+                        n.v[j] = this.beta2 * n.v[j] + (1 - this.beta2) * g * g;
+                        let mHat = n.m[j] / (1 - Math.pow(this.beta1, this.t));
+                        let vHat = n.v[j] / (1 - Math.pow(this.beta2, this.t));
+                        n.weights[j] -= this.learningRate * mHat / (Math.sqrt(vHat) + this.epsilon);
+                    } else {
+                        n.weights[j] -= this.learningRate * g;
+                    }
+                }
+                let g = clipGrad(n.error);
+                if (this.optimizer === 'adam') {
+                    n.biasM = this.beta1 * n.biasM + (1 - this.beta1) * g;
+                    n.biasV = this.beta2 * n.biasV + (1 - this.beta2) * g * g;
+                    let mHat = n.biasM / (1 - Math.pow(this.beta1, this.t));
+                    let vHat = n.biasV / (1 - Math.pow(this.beta2, this.t));
+                    n.bias -= this.learningRate * mHat / (Math.sqrt(vHat) + this.epsilon);
+                } else {
+                    n.bias -= this.learningRate * g;
+                }
+            }
+        }
+    }
+
+    trainStep(imageObj, target) {
+        let pred = this.forward(imageObj, true);
+        this.backward(target);
+        this.updateWeights();
+        return this.crossEntropyLoss(pred, target);
+    }
+
+    // ==================== FACADE METHODS ====================
+
+    // === 1. Feature Map Access ===
+
+    getFeatureMap(layerIdx, filterIdx) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length) return null;
+        let layer = this.convLayers[layerIdx];
+        if (!layer.output || filterIdx < 0 || filterIdx >= layer.output.length) return null;
+        return layer.output[filterIdx].map(row => [...row]);
+    }
+
+    setFeatureMap(layerIdx, filterIdx, map) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length) return;
+        let layer = this.convLayers[layerIdx];
+        if (!layer.output || filterIdx < 0 || filterIdx >= layer.output.length) return;
+        for (let h = 0; h < map.length && h < layer.output[filterIdx].length; h++) {
+            for (let w = 0; w < map[h].length && w < layer.output[filterIdx][h].length; w++) {
+                layer.output[filterIdx][h][w] = map[h][w];
+            }
+        }
+    }
+
+    // === 2. Pre-Activation Access ===
+
+    getPreActivation(layerIdx, filterIdx) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length) return null;
+        let layer = this.convLayers[layerIdx];
+        if (!layer.preAct || filterIdx < 0 || filterIdx >= layer.preAct.length) return null;
+        return layer.preAct[filterIdx].map(row => [...row]);
+    }
+
+    setPreActivation(layerIdx, filterIdx, map) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length) return;
+        let layer = this.convLayers[layerIdx];
+        if (!layer.preAct || filterIdx < 0 || filterIdx >= layer.preAct.length) return;
+        for (let h = 0; h < map.length && h < layer.preAct[filterIdx].length; h++) {
+            for (let w = 0; w < map[h].length && w < layer.preAct[filterIdx][h].length; w++) {
+                layer.preAct[filterIdx][h][w] = map[h][w];
+            }
+        }
+    }
+
+    // === 3. Kernel/Filter Access ===
+
+    getKernel(layerIdx, filterIdx, channelIdx) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length) return null;
+        let layer = this.convLayers[layerIdx];
+        if (filterIdx < 0 || filterIdx >= layer.filters.length) return null;
+        if (channelIdx < 0 || channelIdx >= layer.filters[filterIdx].weights.length) return null;
+        return layer.filters[filterIdx].weights[channelIdx].map(row => [...row]);
+    }
+
+    setKernel(layerIdx, filterIdx, channelIdx, kernelArray) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length) return;
+        let layer = this.convLayers[layerIdx];
+        if (filterIdx < 0 || filterIdx >= layer.filters.length) return;
+        if (channelIdx < 0 || channelIdx >= layer.filters[filterIdx].weights.length) return;
+        let w = layer.filters[filterIdx].weights[channelIdx];
+        for (let h = 0; h < kernelArray.length && h < w.length; h++) {
+            for (let k = 0; k < kernelArray[h].length && k < w[h].length; k++) {
+                w[h][k] = kernelArray[h][k];
+            }
+        }
+    }
+
+    getBias(layerIdx, filterIdx) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length) return 0;
+        let layer = this.convLayers[layerIdx];
+        if (filterIdx < 0 || filterIdx >= layer.filters.length) return 0;
+        return layer.filters[filterIdx].bias;
+    }
+
+    setBias(layerIdx, filterIdx, value) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length) return;
+        let layer = this.convLayers[layerIdx];
+        if (filterIdx < 0 || filterIdx >= layer.filters.length) return;
+        layer.filters[filterIdx].bias = value;
+    }
+
+    // === 4. Batch Activations ===
+
+    getBatchActivations(layerIdx) {
+        return this.batchActivations[layerIdx] || null;
+    }
+
+    setBatchActivations(layerIdx, batchTensor) {
+        while (this.batchActivations.length <= layerIdx) this.batchActivations.push(null);
+        this.batchActivations[layerIdx] = batchTensor;
+    }
+
+    // === 5. Pooling and Dropout States ===
+
+    getPoolingIndices(layerIdx, filterIdx) {
+        if (layerIdx < 0 || layerIdx >= this.poolLayers.length) return null;
+        let layer = this.poolLayers[layerIdx];
+        if (!layer.maxIndices || filterIdx < 0 || filterIdx >= layer.maxIndices.length) return null;
+        return layer.maxIndices[filterIdx].map(row => row.map(idx => ({ y: idx.ph, x: idx.pw })));
+    }
+
+    getDropoutMask(layerIdx) {
+        if (layerIdx < 0 || layerIdx >= this.fcLayers.length) return null;
+        return this.fcLayers[layerIdx].neurons.map(n => n.dropoutMask);
+    }
+
+    setDropoutMask(layerIdx, mask) {
+        if (layerIdx < 0 || layerIdx >= this.fcLayers.length) return;
+        let neurons = this.fcLayers[layerIdx].neurons;
+        for (let i = 0; i < mask.length && i < neurons.length; i++) {
+            neurons[i].dropoutMask = mask[i];
+        }
+    }
+
+    // === 6. Gradient Access ===
+
+    getFilterGradient(layerIdx, filterIdx, channelIdx) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length) return null;
+        let layer = this.convLayers[layerIdx];
+        if (filterIdx < 0 || filterIdx >= layer.filters.length) return null;
+        if (channelIdx < 0 || channelIdx >= layer.filters[filterIdx].grads.length) return null;
+        return layer.filters[filterIdx].grads[channelIdx].map(row => [...row]);
+    }
+
+    getBiasGradient(layerIdx, filterIdx) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length) return 0;
+        let layer = this.convLayers[layerIdx];
+        if (filterIdx < 0 || filterIdx >= layer.filters.length) return 0;
+        return layer.filters[filterIdx].biasGrad;
+    }
+
+    getActivationGradient(layerIdx, filterIdx, y, x) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length) return 0;
+        let layer = this.convLayers[layerIdx];
+        if (!layer.preAct || filterIdx < 0 || filterIdx >= layer.preAct.length) return 0;
+        if (y < 0 || y >= layer.preAct[filterIdx].length) return 0;
+        if (x < 0 || x >= layer.preAct[filterIdx][y].length) return 0;
+        return this.reluD(layer.preAct[filterIdx][y][x]);
+    }
+
+    getOptimizerState(layerIdx, filterIdx, param) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length) return null;
+        let layer = this.convLayers[layerIdx];
+        if (filterIdx < 0 || filterIdx >= layer.filters.length) return null;
+        let f = layer.filters[filterIdx];
+        if (param === 'm' || param === 'M') return f.m.map(c => c.map(r => [...r]));
+        if (param === 'v' || param === 'V') return f.v.map(c => c.map(r => [...r]));
+        return null;
+    }
+
+    // === 7. Flattened Features ===
+
+    getFlattenedFeatures() {
+        return this.flattenedFeatures ? [...this.flattenedFeatures] : null;
+    }
+
+    setFlattenedFeatures(vector) {
+        this.flattenedFeatures = [...vector];
+    }
+
+    // === 8. Output Layer ===
+
+    getLogits() {
+        return this.outputLayer.neurons.map(n => n.preAct);
+    }
+
+    getSoftmax() {
+        return this.softmax(this.getLogits());
+    }
+
+    // === 9. Layer Config ===
+
+    getLayerConfig(layerIdx) {
+        if (layerIdx >= 0 && layerIdx < this.convLayers.length) {
+            let l = this.convLayers[layerIdx];
+            return {
+                layerType: 'conv',
+                filterCount: l.filters.length,
+                kernelSize: l.kernel,
+                stride: l.stride,
+                padding: l.padding,
+                inputChannels: l.inChannels,
+                outputWidth: l.output ? l.output[0][0].length : 0,
+                outputHeight: l.output ? l.output[0].length : 0
+            };
+        }
+        let fcIdx = layerIdx - this.convLayers.length;
+        if (fcIdx >= 0 && fcIdx < this.fcLayers.length) {
+            let l = this.fcLayers[fcIdx];
+            return {
+                layerType: 'fc',
+                neuronCount: l.neurons.length,
+                inputSize: l.neurons[0] ? l.neurons[0].weights.length : 0
+            };
+        }
+        if (fcIdx === this.fcLayers.length) {
+            return {
+                layerType: 'output',
+                neuronCount: this.outputLayer.neurons.length,
+                inputSize: this.outputLayer.neurons[0] ? this.outputLayer.neurons[0].weights.length : 0
+            };
+        }
+        return null;
+    }
+
+    getNumLayers() {
+        return this.convLayers.length + this.fcLayers.length + 1;
+    }
+
+    getNumConvLayers() {
+        return this.convLayers.length;
+    }
+
+    getNumFCLayers() {
+        return this.fcLayers.length + 1;
+    }
+
+    getNumFilters(layerIdx) {
+        if (layerIdx >= 0 && layerIdx < this.convLayers.length) {
+            return this.convLayers[layerIdx].filters.length;
+        }
+        return 0;
+    }
+
+    // === 10. Saliency and Deconv ===
+
+    getSaliencyMap(layerIdx, filterIdx) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length) return null;
+        let layer = this.convLayers[layerIdx];
+        if (!layer.output || filterIdx < 0 || filterIdx >= layer.output.length) return null;
+
+        let map = layer.output[filterIdx];
+        let min = Infinity, max = -Infinity;
+        for (let row of map) for (let v of row) { min = Math.min(min, v); max = Math.max(max, v); }
+        let range = max - min || 1;
+
+        return map.map(row => row.map(v => (v - min) / range));
+    }
+
+    getDeconv(layerIdx, filterIdx, upToInput = false) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length) return null;
+        let layer = this.convLayers[layerIdx];
+        if (!layer.output || filterIdx < 0 || filterIdx >= layer.output.length) return null;
+
+        let grad = [];
+        for (let f = 0; f < layer.output.length; f++) {
+            grad.push(layer.output[f].map(row => row.map((v, w) => f === filterIdx ? v : 0)));
+        }
+
+        if (upToInput) {
+            for (let i = layerIdx; i >= 0; i--) {
+                if (i < this.poolLayers.length) {
+                    grad = this.poolBackward(this.poolLayers[i], grad);
+                }
+                if (i > 0) {
+                    grad = this.convBackward(this.convLayers[i], grad);
+                }
+            }
+        }
+        return grad;
+    }
+
+    // === 11. Structural Mutations ===
+
+    addFilter(layerIdx, params = null) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length) return;
+        let layer = this.convLayers[layerIdx];
+        let kernel = layer.kernel;
+        let inChannels = layer.inChannels;
+        let scale = Math.sqrt(2.0 / (inChannels * kernel * kernel));
+
+        let w = [], m = [], v = [], grads = [];
+        for (let c = 0; c < inChannels; c++) {
+            let k = [], km = [], kv = [], kg = [];
+            for (let h = 0; h < kernel; h++) {
+                let row = [], rm = [], rv = [], rg = [];
+                for (let wIdx = 0; wIdx < kernel; wIdx++) {
+                    row.push(params ? params[c][h][wIdx] : (Math.random() - 0.5) * scale);
+                    rm.push(0); rv.push(0); rg.push(0);
+                }
+                k.push(row); km.push(rm); kv.push(rv); kg.push(rg);
+            }
+            w.push(k); m.push(km); v.push(kv); grads.push(kg);
+        }
+        layer.filters.push({ weights: w, bias: 0, biasM: 0, biasV: 0, biasGrad: 0, m, v, grads });
+    }
+
+    removeFilter(layerIdx, filterIdx) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length) return;
+        let layer = this.convLayers[layerIdx];
+        if (filterIdx < 0 || filterIdx >= layer.filters.length || layer.filters.length <= 1) return;
+        layer.filters.splice(filterIdx, 1);
+    }
+
+    addConvLayer(position, numFilters, kernelSize, stride = 1, padding = null) {
+        if (position < 0) position = 0;
+        if (position > this.convLayers.length) position = this.convLayers.length;
+
+        let inChannels = position > 0 ? this.convLayers[position - 1].filters.length : this.channels;
+        if (padding === null) padding = Math.floor(kernelSize / 2);
+
+        let newLayer = this.initConvLayer(numFilters, inChannels, kernelSize, padding);
+        this.convLayers.splice(position, 0, newLayer);
+        this.poolLayers.splice(position, 0, this.initPoolLayer(2));
+    }
+
+    removeLayer(layerIdx) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length || this.convLayers.length <= 1) return;
+        this.convLayers.splice(layerIdx, 1);
+        if (layerIdx < this.poolLayers.length) {
+            this.poolLayers.splice(layerIdx, 1);
+        }
+    }
+
+    // === 12. Statistics ===
+
+    getLayerStats(layerIdx) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length) return null;
+        let layer = this.convLayers[layerIdx];
+        if (!layer.output) return null;
+
+        let values = [];
+        for (let f of layer.output) for (let row of f) for (let v of row) values.push(v);
+
+        if (values.length === 0) return null;
+
+        let sum = values.reduce((a, b) => a + b, 0);
+        let mean = sum / values.length;
+        let sumSq = values.reduce((a, b) => a + (b - mean) ** 2, 0);
+        let stdDev = Math.sqrt(sumSq / values.length);
+
+        return {
+            mean,
+            stdDev,
+            min: Math.min(...values),
+            max: Math.max(...values),
+            count: values.length
+        };
+    }
+
+    getActivationHistogram(layerIdx, numBins = 50) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length) return null;
+        let layer = this.convLayers[layerIdx];
+        if (!layer.output) return null;
+
+        let values = [];
+        for (let f of layer.output) for (let row of f) for (let v of row) values.push(v);
+        if (values.length === 0) return null;
+
+        let min = Math.min(...values), max = Math.max(...values);
+        let range = max - min || 1;
+        let bins = new Array(numBins).fill(0);
+
+        for (let v of values) {
+            let idx = Math.min(numBins - 1, Math.floor((v - min) / range * (numBins - 1)));
+            bins[idx]++;
+        }
+        return bins;
+    }
+
+    getWeightHistogram(layerIdx, numBins = 50) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length) return null;
+        let layer = this.convLayers[layerIdx];
+
+        let values = [];
+        for (let f of layer.filters)
+            for (let c of f.weights)
+                for (let row of c)
+                    for (let v of row) values.push(v);
+
+        if (values.length === 0) return null;
+
+        let min = Math.min(...values), max = Math.max(...values);
+        let range = max - min || 1;
+        let bins = new Array(numBins).fill(0);
+
+        for (let v of values) {
+            let idx = Math.min(numBins - 1, Math.floor((v - min) / range * (numBins - 1)));
+            bins[idx]++;
+        }
+        return bins;
+    }
+
+    // === 13. Receptive Field ===
+
+    getReceptiveField(layerIdx, featureIdx, y, x) {
+        if (layerIdx < 0 || layerIdx >= this.convLayers.length) return null;
+
+        let startX = x, endX = x, startY = y, endY = y;
+
+        for (let i = layerIdx; i >= 0; i--) {
+            if (i < this.poolLayers.length) {
+                let poolSize = this.poolLayers[i].poolSize;
+                startX *= poolSize; endX = endX * poolSize + poolSize - 1;
+                startY *= poolSize; endY = endY * poolSize + poolSize - 1;
+            }
+
+            let layer = this.convLayers[i];
+            startX = startX * layer.stride - layer.padding;
+            endX = endX * layer.stride + layer.kernel - 1 - layer.padding;
+            startY = startY * layer.stride - layer.padding;
+            endY = endY * layer.stride + layer.kernel - 1 - layer.padding;
+        }
+
+        return { startX, endX, startY, endY, channels: Array.from({ length: this.channels }, (_, i) => i) };
+    }
+
+    // === 14. Batch Norm ===
+
+    getBatchNormParams(layerIdx) {
+        return this.batchNormParams[layerIdx] || null;
+    }
+
+    setBatchNormParams(layerIdx, params) {
+        while (this.batchNormParams.length <= layerIdx) this.batchNormParams.push(null);
+        this.batchNormParams[layerIdx] = params;
+    }
+
+    // === 15. Attributes ===
+
+    setFilterAttribute(layerIdx, filterIdx, key, value) {
+        while (this.filterAttributes.length <= layerIdx) this.filterAttributes.push([]);
+        while (this.filterAttributes[layerIdx].length <= filterIdx) this.filterAttributes[layerIdx].push({});
+        this.filterAttributes[layerIdx][filterIdx][key] = value;
+    }
+
+    getFilterAttribute(layerIdx, filterIdx, key) {
+        if (layerIdx >= this.filterAttributes.length) return null;
+        if (filterIdx >= this.filterAttributes[layerIdx].length) return null;
+        return this.filterAttributes[layerIdx][filterIdx][key] || null;
+    }
+
+    // === Training Mode ===
+
+    setTrainingMode(training) {
+        this.training = training;
+    }
+
+    getTrainingMode() {
+        return this.training;
+    }
+
+    // === Serialization ===
+
+    toJSON() {
+        return {
+            inputWidth: this.inputWidth,
+            inputHeight: this.inputHeight,
+            channels: this.channels,
+            convFilters: this.convFilters,
+            kernelSizes: this.kernelSizes,
+            poolSizes: this.poolSizes,
+            fcSizes: this.fcSizes,
+            outputSize: this.outputSize,
+            learningRate: this.learningRate,
+            dropoutRate: this.dropoutRate,
+            optimizer: this.optimizer,
+            t: this.t,
+            convLayers: this.convLayers,
+            fcLayers: this.fcLayers,
+            outputLayer: this.outputLayer,
+            batchNormParams: this.batchNormParams,
+            filterAttributes: this.filterAttributes
+        };
+    }
+
+    static fromJSON(json) {
+        let cnn = new CNNFacade(
+            json.inputWidth, json.inputHeight, json.channels,
+            json.convFilters, json.kernelSizes, json.poolSizes,
+            json.fcSizes, json.outputSize, json.learningRate,
+            json.dropoutRate, json.optimizer
+        );
+        cnn.t = json.t || 0;
+        cnn.convLayers = json.convLayers;
+        cnn.fcLayers = json.fcLayers;
+        cnn.outputLayer = json.outputLayer;
+        cnn.batchNormParams = json.batchNormParams || [];
+        cnn.filterAttributes = json.filterAttributes || [];
+        return cnn;
+    }
+}
+
+// Export for Node.js / module systems
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = CNNFacade;
+}</script>
+<script>
+"use strict";
+
+let cnn = null;
+let dataset = { train: [], test: [] };
+let sampleImage = null;
+let stopTrainingFlag = false;
+
+// ============== Utility Functions ==============
+function randomImage(ch, h, w) {
+    let d = [];
+    for (let c = 0; c < ch; c++) {
+        let chan = [];
+        for (let i = 0; i < h; i++) {
+            let row = [];
+            for (let j = 0; j < w; j++) row.push(Math.random());
+            chan.push(row);
+        }
+        d.push(chan);
+    }
+    return d;
+}
+
+function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+}
+
+function drawImageToCanvas(ctx, imgObj, x, y, w, h) {
+    const { data, width, height, channels } = imgObj;
+    const imgData = ctx.createImageData(width, height);
+    for (let i = 0; i < height; i++) {
+        for (let j = 0; j < width; j++) {
+            const idx = (i * width + j) * 4;
+            if (channels === 1) {
+                const v = Math.floor(data[0][i][j] * 255);
+                imgData.data[idx] = v; imgData.data[idx+1] = v; imgData.data[idx+2] = v;
+            } else {
+                imgData.data[idx] = Math.floor(data[0][i][j] * 255);
+                imgData.data[idx+1] = Math.floor(data[1][i][j] * 255);
+                imgData.data[idx+2] = Math.floor(data[2][i][j] * 255);
+            }
+            imgData.data[idx+3] = 255;
+        }
+    }
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = width; tempCanvas.height = height;
+    tempCanvas.getContext('2d').putImageData(imgData, 0, 0);
+    ctx.drawImage(tempCanvas, x, y, w, h);
+}
+
+// ============== Network Creation ==============
+function createNetwork() {
+    const w = +document.getElementById("imgWidth").value;
+    const h = +document.getElementById("imgHeight").value;
+    const ch = +document.getElementById("imgChannels").value;
+    const convFilters = document.getElementById("convFilters").value.split(',').map(x => +x.trim());
+    const kernelSizes = document.getElementById("kernelSizes").value.split(',').map(x => +x.trim());
+    const poolSizes = document.getElementById("poolSizes").value.split(',').map(x => +x.trim());
+    const fcSizes = document.getElementById("fcSizes").value.split(',').map(x => +x.trim()).filter(x => x > 0);
+    const outputSize = +document.getElementById("outputSize").value;
+    const lr = +document.getElementById("learningRate").value;
+    const dropout = +document.getElementById("dropoutRate").value;
+    const optimizer = document.getElementById("optimizer").value;
+    
+    cnn = new CNNFacade(w, h, ch, convFilters, kernelSizes, poolSizes, fcSizes, outputSize, lr, dropout, optimizer);
+    
+    let totalParams = 0;
+    for (let l of cnn.convLayers) for (let f of l.filters) totalParams += f.weights.flat(3).length + 1;
+    for (let l of [...cnn.fcLayers, cnn.outputLayer]) for (let n of l.neurons) totalParams += n.weights.length + 1;
+    
+    document.getElementById("networkStatus").textContent = `CNN created! (${totalParams.toLocaleString()} params)`;
+    randomizeImage();
+}
+
+// ============== Dataset ==============
+function generateSyntheticDataset() {
+    const w = +document.getElementById("imgWidth").value;
+    const h = +document.getElementById("imgHeight").value;
+    const ch = +document.getElementById("imgChannels").value;
+    const numClasses = +document.getElementById("outputSize").value;
+    const samplesPerClass = +document.getElementById("samplesPerClass").value;
+    
+    dataset.train = [];
+    dataset.test = [];
+    
+    for (let c = 0; c < numClasses; c++) {
+        for (let s = 0; s < samplesPerClass; s++) {
+            const data = [];
+            for (let chan = 0; chan < ch; chan++) {
+                const chanData = [];
+                for (let i = 0; i < h; i++) {
+                    const row = [];
+                    for (let j = 0; j < w; j++) {
+                        let val = Math.random() * 0.3;
+                        if (c === 0) val += (i + j) / (w + h) * 0.5;
+                        else if (c === 1) val += (i > h/2 ? 0.5 : 0);
+                        else if (c === 2) val += (j > w/2 ? 0.5 : 0);
+                        else if (c === 3) val += ((i + j) % 4 < 2 ? 0.5 : 0);
+                        else val += Math.sin(i * c * 0.3) * 0.3 + 0.3;
+                        row.push(Math.min(1, Math.max(0, val)));
+                    }
+                    chanData.push(row);
+                }
+                data.push(chanData);
+            }
+            const target = new Array(numClasses).fill(0);
+            target[c] = 1;
+            const item = { image: { data, width: w, height: h, channels: ch }, target, label: c };
+            if (s < samplesPerClass * 0.8) dataset.train.push(item);
+            else dataset.test.push(item);
+        }
+    }
+    
+    dataset.train = shuffle(dataset.train);
+    dataset.test = shuffle(dataset.test);
+    
+    document.getElementById("datasetInfo").textContent = `Train: ${dataset.train.length}, Test: ${dataset.test.length}`;
+    previewDataset();
+}
+
+function previewDataset() {
+    if (dataset.train.length === 0) return;
+    const canvas = document.getElementById("datasetPreview");
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const gridSize = 5;
+    const cellW = canvas.width / gridSize;
+    const cellH = canvas.height / gridSize;
+    for (let i = 0; i < gridSize * gridSize && i < dataset.train.length; i++) {
+        const x = (i % gridSize) * cellW;
+        const y = Math.floor(i / gridSize) * cellH;
+        drawImageToCanvas(ctx, dataset.train[i].image, x, y, cellW - 2, cellH - 2);
+    }
+}
+
+// ============== Training ==============
+async function trainOnDataset() {
+    if (!cnn) { alert("Create network first!"); return; }
+    if (dataset.train.length === 0) { alert("Generate dataset first!"); return; }
+    
+    stopTrainingFlag = false;
+    document.getElementById("trainBtn").disabled = true;
+    document.getElementById("stopBtn").disabled = false;
+    
+    const epochs = +document.getElementById("trainEpochs").value;
+    const batchSize = +document.getElementById("batchSize").value;
+    const log = document.getElementById("trainingLog");
+    log.innerHTML = "";
+    
+    for (let epoch = 0; epoch < epochs && !stopTrainingFlag; epoch++) {
+        const trainData = shuffle([...dataset.train]);
+        let totalLoss = 0, correct = 0;
+        
+        for (let i = 0; i < trainData.length && !stopTrainingFlag; i++) {
+            const { image, target } = trainData[i];
+            const loss = cnn.trainStep(image, target);
+            totalLoss += loss;
+            
+            const pred = cnn.predict(image);
+            if (pred.indexOf(Math.max(...pred)) === target.indexOf(1)) correct++;
+        }
+        
+        const progress = ((epoch + 1) / epochs) * 100;
+        document.getElementById("trainProgress").style.width = progress + "%";
+        
+        const avgLoss = totalLoss / trainData.length;
+        const accuracy = (correct / trainData.length * 100).toFixed(1);
+        log.innerHTML += `Epoch ${epoch + 1}/${epochs} - Loss: ${avgLoss.toFixed(4)} - Acc: ${accuracy}%\n`;
+        log.scrollTop = log.scrollHeight;
+        document.getElementById("trainStatus").textContent = `Epoch ${epoch + 1}/${epochs}`;
+        
+        await new Promise(r => setTimeout(r, 0));
+    }
+    
+    document.getElementById("trainBtn").disabled = false;
+    document.getElementById("stopBtn").disabled = true;
+    document.getElementById("trainStatus").textContent = stopTrainingFlag ? "Stopped" : "Complete!";
+}
+
+function stopTraining() { stopTrainingFlag = true; }
+
+// ============== Evaluation ==============
+function evaluateModel() {
+    if (!cnn || dataset.test.length === 0) { alert("Need model and test data!"); return; }
+    
+    let correct = 0, totalLoss = 0;
+    for (const item of dataset.test) {
+        const pred = cnn.predict(item.image);
+        totalLoss += cnn.crossEntropyLoss(pred, item.target);
+        if (pred.indexOf(Math.max(...pred)) === item.label) correct++;
+    }
+    
+    const accuracy = (correct / dataset.test.length * 100).toFixed(2);
+    const avgLoss = (totalLoss / dataset.test.length).toFixed(4);
+    
+    document.getElementById("metricsGrid").innerHTML = `
+        <div class="metric-card"><div class="metric-value">${accuracy}%</div><div class="metric-label">Accuracy</div></div>
+        <div class="metric-card"><div class="metric-value">${avgLoss}</div><div class="metric-label">Avg Loss</div></div>
+        <div class="metric-card"><div class="metric-value">${dataset.test.length}</div><div class="metric-label">Test Samples</div></div>
+    `;
+}
+
+function predictSingleImage() {
+    if (!cnn || !sampleImage) return;
+    const pred = cnn.predict(sampleImage);
+    const maxIdx = pred.indexOf(Math.max(...pred));
+    const confidence = (pred[maxIdx] * 100).toFixed(1);
+    
+    let html = `<strong>Prediction: Class ${maxIdx}</strong> (${confidence}% confidence)<br><br>`;
+    for (let i = 0; i < pred.length; i++) {
+        const pct = (pred[i] * 100).toFixed(1);
+        const bg = i === maxIdx ? '#4285f4' : '#e0e0e0';
+        html += `<div>Class ${i}: <div style="display:inline-block;width:150px;height:14px;background:#f0f0f0;border-radius:3px;overflow:hidden;vertical-align:middle"><div style="width:${pct}%;height:100%;background:${bg}"></div></div> ${pct}%</div>`;
+    }
+    document.getElementById("predictionResult").innerHTML = html;
+}
+
+function randomizeImage() {
+    const w = +document.getElementById("imgWidth").value;
+    const h = +document.getElementById("imgHeight").value;
+    const ch = +document.getElementById("imgChannels").value;
+    sampleImage = { data: randomImage(ch, h, w), width: w, height: h, channels: ch };
+    visualizeInput();
+}
+
+function visualizeInput() {
+    if (!sampleImage) return;
+    const canvas = document.getElementById("inputCanvas");
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawImageToCanvas(ctx, sampleImage, 0, 0, canvas.width, canvas.height);
+}
+
+// ============== Model Persistence ==============
+function saveModel() {
+    if (!cnn) return;
+    localStorage.setItem('cnn_facade_model', JSON.stringify(cnn.toJSON()));
+    document.getElementById("networkStatus").textContent = "Model saved!";
+}
+
+function loadModel() {
+    const saved = localStorage.getItem('cnn_facade_model');
+    if (!saved) { document.getElementById("networkStatus").textContent = "No saved model!"; return; }
+    try {
+        cnn = CNNFacade.fromJSON(JSON.parse(saved));
+        document.getElementById("networkStatus").textContent = "Model loaded!";
+    } catch(e) {
+        document.getElementById("networkStatus").textContent = "Error: " + e;
+    }
+}
+
+// ============== Facade UI ==============
+function getFacadeParams() {
+    return {
+        layerIdx: +document.getElementById("facadeLayerIdx").value,
+        filterIdx: +document.getElementById("facadeFilterIdx").value,
+        channelIdx: +document.getElementById("facadeChannelIdx").value,
+        y: +document.getElementById("facadeY").value,
+        x: +document.getElementById("facadeX").value,
+        value: +document.getElementById("facadeValue").value,
+        numBins: +document.getElementById("facadeNumBins").value,
+        attrKey: document.getElementById("facadeAttrKey").value,
+        attrValue: document.getElementById("facadeAttrValue").value
+    };
+}
+
+function facadeOutput(msg) {
+    document.getElementById("facadeOutput").innerText = typeof msg === 'object' ? JSON.stringify(msg, null, 2) : msg;
+}
+
+function facadeClearViz() {
+    document.getElementById("facadeViz").innerHTML = "";
+}
+
+// === 1. Feature Map ===
+function facadeGetFeatureMap() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    cnn.predict(sampleImage);
+    const map = cnn.getFeatureMap(p.layerIdx, p.filterIdx);
+    facadeOutput(map ? `Feature map [${p.layerIdx}][${p.filterIdx}]: ${map.length}x${map[0]?.length}\n\nFirst row: [${map[0]?.slice(0,5).map(v=>v.toFixed(4)).join(', ')}...]` : "No data");
+}
+
+function facadeSetFeatureMap() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    cnn.predict(sampleImage);
+    const map = cnn.getFeatureMap(p.layerIdx, p.filterIdx);
+    if (map) {
+        const zeros = map.map(row => row.map(() => 0));
+        cnn.setFeatureMap(p.layerIdx, p.filterIdx, zeros);
+        facadeOutput(`Set feature map [${p.layerIdx}][${p.filterIdx}] to zeros`);
+    }
+}
+
+function facadeVisualizeFeatureMap() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    cnn.predict(sampleImage);
+    const map = cnn.getFeatureMap(p.layerIdx, p.filterIdx);
+    if (!map) { facadeOutput("No feature map"); return; }
+    
+    const container = document.getElementById("facadeViz");
+    container.innerHTML = `<strong>Feature Map [${p.layerIdx}][${p.filterIdx}]</strong><br>`;
+    const canvas = document.createElement('canvas');
+    const h = map.length, w = map[0].length;
+    canvas.width = w * 4; canvas.height = h * 4;
+    const ctx = canvas.getContext('2d');
+    
+    let max = -Infinity, min = Infinity;
+    for (const row of map) for (const v of row) { max = Math.max(max, v); min = Math.min(min, v); }
+    const range = max - min || 1;
+    
+    for (let i = 0; i < h; i++) {
+        for (let j = 0; j < w; j++) {
+            const v = Math.floor((map[i][j] - min) / range * 255);
+            ctx.fillStyle = `rgb(${v},${v},${v})`;
+            ctx.fillRect(j * 4, i * 4, 4, 4);
+        }
+    }
+    container.appendChild(canvas);
+    facadeOutput(`Visualized feature map ${h}x${w}, range [${min.toFixed(4)}, ${max.toFixed(4)}]`);
+}
+
+// === 2. Pre-Activation ===
+function facadeGetPreActivation() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    cnn.predict(sampleImage);
+    const map = cnn.getPreActivation(p.layerIdx, p.filterIdx);
+    facadeOutput(map ? `Pre-activation [${p.layerIdx}][${p.filterIdx}]: ${map.length}x${map[0]?.length}` : "No data");
+}
+
+function facadeSetPreActivation() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    cnn.predict(sampleImage);
+    const map = cnn.getPreActivation(p.layerIdx, p.filterIdx);
+    if (map) {
+        const filled = map.map(row => row.map(() => p.value));
+        cnn.setPreActivation(p.layerIdx, p.filterIdx, filled);
+        facadeOutput(`Set pre-activation to ${p.value}`);
+    }
+}
+
+// === 3. Kernel ===
+function facadeGetKernel() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    const kernel = cnn.getKernel(p.layerIdx, p.filterIdx, p.channelIdx);
+    facadeOutput(kernel ? `Kernel [${p.layerIdx}][${p.filterIdx}][${p.channelIdx}]:\n${kernel.map(r => r.map(v => v.toFixed(4)).join(' ')).join('\n')}` : "No data");
+}
+
+function facadeSetKernel() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    const kernel = cnn.getKernel(p.layerIdx, p.filterIdx, p.channelIdx);
+    if (kernel) {
+        const newK = kernel.map(r => r.map(() => (Math.random() - 0.5) * 0.5));
+        cnn.setKernel(p.layerIdx, p.filterIdx, p.channelIdx, newK);
+        facadeOutput(`Set kernel to random values`);
+    }
+}
+
+function facadeGetBias() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    const bias = cnn.getBias(p.layerIdx, p.filterIdx);
+    facadeOutput(`Bias [${p.layerIdx}][${p.filterIdx}] = ${bias.toFixed(8)}`);
+}
+
+function facadeSetBias() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    cnn.setBias(p.layerIdx, p.filterIdx, p.value);
+    facadeOutput(`Set bias [${p.layerIdx}][${p.filterIdx}] = ${p.value}`);
+}
+
+function facadeVisualizeKernels() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    const container = document.getElementById("facadeViz");
+    container.innerHTML = `<strong>Kernels Layer ${p.layerIdx}</strong><br>`;
+    
+    const numFilters = cnn.getNumFilters(p.layerIdx);
+    for (let f = 0; f < numFilters; f++) {
+        const kernel = cnn.getKernel(p.layerIdx, f, 0);
+        if (!kernel) continue;
+        const canvas = document.createElement('canvas');
+        const size = kernel.length;
+        canvas.width = size * 10; canvas.height = size * 10;
+        const ctx = canvas.getContext('2d');
+        
+        let max = -Infinity, min = Infinity;
+        for (const row of kernel) for (const v of row) { max = Math.max(max, v); min = Math.min(min, v); }
+        const range = max - min || 1;
+        
+        for (let i = 0; i < size; i++) {
+            for (let j = 0; j < size; j++) {
+                const v = Math.floor((kernel[i][j] - min) / range * 255);
+                ctx.fillStyle = `rgb(${v},${v},${v})`;
+                ctx.fillRect(j * 10, i * 10, 10, 10);
+            }
+        }
+        
+        const div = document.createElement('div');
+        div.className = 'filter-viz';
+        div.appendChild(canvas);
+        div.innerHTML += `<span>F${f}</span>`;
+        container.appendChild(div);
+    }
+    facadeOutput(`Visualized ${numFilters} kernels`);
+}
+
+// === 4. Batch Activations ===
+function facadeGetBatchActivations() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    const batch = cnn.getBatchActivations(p.layerIdx);
+    facadeOutput(batch ? `Batch activations: ${JSON.stringify(batch).slice(0, 200)}...` : "No batch activations stored");
+}
+
+function facadeSetBatchActivations() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    cnn.setBatchActivations(p.layerIdx, [[[[1, 2], [3, 4]]]]);
+    facadeOutput(`Set batch activations for layer ${p.layerIdx}`);
+}
+
+// === 5. Pooling & Dropout ===
+function facadeGetPoolingIndices() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    cnn.predict(sampleImage);
+    const indices = cnn.getPoolingIndices(p.layerIdx, p.filterIdx);
+    facadeOutput(indices ? `Pooling indices [${p.layerIdx}][${p.filterIdx}]: ${indices.length}x${indices[0]?.length}` : "No pooling data");
+}
+
+function facadeGetDropoutMask() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    const mask = cnn.getDropoutMask(p.layerIdx);
+    facadeOutput(mask ? `Dropout mask [${p.layerIdx}]: [${mask.slice(0, 10).map(v => v.toFixed(2)).join(', ')}...]` : "No mask");
+}
+
+function facadeSetDropoutMask() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    const mask = cnn.getDropoutMask(p.layerIdx);
+    if (mask) {
+        cnn.setDropoutMask(p.layerIdx, mask.map(() => 1));
+        facadeOutput(`Set dropout mask to all 1s`);
+    }
+}
+
+// === 6. Gradients ===
+function facadeGetFilterGradient() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    cnn.predict(sampleImage);
+    cnn.trainStep(sampleImage, new Array(cnn.outputSize).fill(0).map((_, i) => i === 0 ? 1 : 0));
+    const grad = cnn.getFilterGradient(p.layerIdx, p.filterIdx, p.channelIdx);
+    facadeOutput(grad ? `Filter gradient:\n${grad.map(r => r.map(v => v.toFixed(6)).join(' ')).join('\n')}` : "No gradient");
+}
+
+function facadeGetBiasGradient() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    const grad = cnn.getBiasGradient(p.layerIdx, p.filterIdx);
+    facadeOutput(`Bias gradient [${p.layerIdx}][${p.filterIdx}] = ${grad.toFixed(8)}`);
+}
+
+function facadeGetActivationGradient() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    const grad = cnn.getActivationGradient(p.layerIdx, p.filterIdx, p.y, p.x);
+    facadeOutput(`Activation gradient [${p.layerIdx}][${p.filterIdx}][${p.y}][${p.x}] = ${grad}`);
+}
+
+function facadeGetOptimizerState() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    const m = cnn.getOptimizerState(p.layerIdx, p.filterIdx, 'm');
+    const v = cnn.getOptimizerState(p.layerIdx, p.filterIdx, 'v');
+    facadeOutput(`Optimizer state [${p.layerIdx}][${p.filterIdx}]:\nM (first moment): ${m?.[0]?.[0]?.[0]?.toFixed(8) || 'N/A'}\nV (second moment): ${v?.[0]?.[0]?.[0]?.toFixed(8) || 'N/A'}\nTimestep t: ${cnn.t}`);
+}
+
+// === 7. Flattened Features ===
+function facadeGetFlattenedFeatures() {
+    if (!cnn) { alert("Create network first"); return; }
+    cnn.predict(sampleImage);
+    const feat = cnn.getFlattenedFeatures();
+    facadeOutput(feat ? `Flattened features (${feat.length}): [${feat.slice(0, 10).map(v => v.toFixed(4)).join(', ')}...]` : "No features");
+}
+
+function facadeSetFlattenedFeatures() {
+    if (!cnn) { alert("Create network first"); return; }
+    cnn.predict(sampleImage);
+    const feat = cnn.getFlattenedFeatures();
+    if (feat) {
+        cnn.setFlattenedFeatures(feat.map(() => 0.5));
+        facadeOutput(`Set all flattened features to 0.5`);
+    }
+}
+
+// === 8. Output ===
+function facadeGetLogits() {
+    if (!cnn) { alert("Create network first"); return; }
+    cnn.predict(sampleImage);
+    const logits = cnn.getLogits();
+    facadeOutput(`Logits: [${logits.map(v => v.toFixed(4)).join(', ')}]`);
+}
+
+function facadeGetSoftmax() {
+    if (!cnn) { alert("Create network first"); return; }
+    cnn.predict(sampleImage);
+    const sm = cnn.getSoftmax();
+    facadeOutput(`Softmax: [${sm.map(v => v.toFixed(4)).join(', ')}]\nSum: ${sm.reduce((a,b) => a+b, 0).toFixed(6)}`);
+}
+
+// === 9. Layer Config ===
+function facadeGetLayerConfig() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    const config = cnn.getLayerConfig(p.layerIdx);
+    facadeOutput(config);
+}
+
+function facadeGetNumLayers() {
+    if (!cnn) { alert("Create network first"); return; }
+    facadeOutput(`Total layers: ${cnn.getNumLayers()}`);
+}
+
+function facadeGetNumConvLayers() {
+    if (!cnn) { alert("Create network first"); return; }
+    facadeOutput(`Conv layers: ${cnn.getNumConvLayers()}`);
+}
+
+function facadeGetNumFCLayers() {
+    if (!cnn) { alert("Create network first"); return; }
+    facadeOutput(`FC layers: ${cnn.getNumFCLayers()}`);
+}
+
+function facadeGetNumFilters() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    facadeOutput(`Filters in layer ${p.layerIdx}: ${cnn.getNumFilters(p.layerIdx)}`);
+}
+
+// === 10. Visualization ===
+function facadeGetSaliencyMap() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    cnn.predict(sampleImage);
+    const map = cnn.getSaliencyMap(p.layerIdx, p.filterIdx);
+    facadeOutput(map ? `Saliency map: ${map.length}x${map[0]?.length}` : "No data");
+}
+
+function facadeGetDeconv() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    cnn.predict(sampleImage);
+    const deconv = cnn.getDeconv(p.layerIdx, p.filterIdx, true);
+    facadeOutput(deconv ? `Deconv: ${deconv.length} channels` : "No data");
+}
+
+function facadeVisualizeSaliency() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    cnn.predict(sampleImage);
+    const map = cnn.getSaliencyMap(p.layerIdx, p.filterIdx);
+    if (!map) { facadeOutput("No saliency map"); return; }
+    
+    const container = document.getElementById("facadeViz");
+    container.innerHTML = `<strong>Saliency Map [${p.layerIdx}][${p.filterIdx}]</strong><br>`;
+    const canvas = document.createElement('canvas');
+    const h = map.length, w = map[0].length;
+    canvas.width = w * 4; canvas.height = h * 4;
+    const ctx = canvas.getContext('2d');
+    
+    for (let i = 0; i < h; i++) {
+        for (let j = 0; j < w; j++) {
+            const v = Math.floor(map[i][j] * 255);
+            ctx.fillStyle = `rgb(${v},${Math.floor(v*0.5)},0)`;
+            ctx.fillRect(j * 4, i * 4, 4, 4);
+        }
+    }
+    container.appendChild(canvas);
+    facadeOutput(`Visualized saliency map ${h}x${w}`);
+}
+
+// === 11. Structural Mutations ===
+function facadeAddFilter() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    const before = cnn.getNumFilters(p.layerIdx);
+    cnn.addFilter(p.layerIdx);
+    facadeOutput(`Added filter to layer ${p.layerIdx}: ${before} -> ${cnn.getNumFilters(p.layerIdx)}`);
+}
+
+function facadeRemoveFilter() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    const before = cnn.getNumFilters(p.layerIdx);
+    cnn.removeFilter(p.layerIdx, p.filterIdx);
+    facadeOutput(`Removed filter ${p.filterIdx} from layer ${p.layerIdx}: ${before} -> ${cnn.getNumFilters(p.layerIdx)}`);
+}
+
+function facadeAddConvLayer() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    const before = cnn.getNumConvLayers();
+    cnn.addConvLayer(p.layerIdx, 8, 3, 1, 1);
+    facadeOutput(`Added conv layer at position ${p.layerIdx}: ${before} -> ${cnn.getNumConvLayers()}`);
+}
+
+function facadeRemoveLayer() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    const before = cnn.getNumConvLayers();
+    cnn.removeLayer(p.layerIdx);
+    facadeOutput(`Removed layer ${p.layerIdx}: ${before} -> ${cnn.getNumConvLayers()}`);
+}
+
+// === 12. Statistics ===
+function facadeGetLayerStats() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    cnn.predict(sampleImage);
+    const stats = cnn.getLayerStats(p.layerIdx);
+    facadeOutput(stats);
+}
+
+function facadeGetActivationHistogram() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    cnn.predict(sampleImage);
+    const hist = cnn.getActivationHistogram(p.layerIdx, p.numBins);
+    renderHistogram(hist, `Activation Histogram Layer ${p.layerIdx}`);
+}
+
+function facadeGetWeightHistogram() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    const hist = cnn.getWeightHistogram(p.layerIdx, p.numBins);
+    renderHistogram(hist, `Weight Histogram Layer ${p.layerIdx}`);
+}
+
+function renderHistogram(hist, title) {
+    if (!hist) { facadeOutput("No histogram data"); return; }
+    const max = Math.max(...hist, 1);
+    const bars = hist.map((count, i) => {
+        const height = (count / max) * 100;
+        return `<div class="histogram-bar" style="height:${height}%" title="Bin ${i}: ${count}"></div>`;
+    }).join("");
+    document.getElementById("histogramDisplay").innerHTML = `<strong>${title}</strong><div class="histogram-container">${bars}</div>`;
+    facadeOutput(`${title}\nBins: ${hist.length}\nTotal: ${hist.reduce((a,b) => a+b, 0)}\nMax bin: ${max}`);
+}
+
+// === 13. Receptive Field ===
+function facadeGetReceptiveField() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    const rf = cnn.getReceptiveField(p.layerIdx, p.filterIdx, p.y, p.x);
+    facadeOutput(rf);
+}
+
+// === 14. Batch Norm ===
+function facadeGetBatchNormParams() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    const params = cnn.getBatchNormParams(p.layerIdx);
+    facadeOutput(params || "No batch norm params for this layer");
+}
+
+function facadeSetBatchNormParams() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    cnn.setBatchNormParams(p.layerIdx, { gamma: [1], beta: [0], runningMean: [0], runningVar: [1], enabled: true });
+    facadeOutput(`Set batch norm params for layer ${p.layerIdx}`);
+}
+
+// === 15. Attributes ===
+function facadeSetFilterAttribute() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    cnn.setFilterAttribute(p.layerIdx, p.filterIdx, p.attrKey, p.attrValue);
+    facadeOutput(`Set attribute [${p.layerIdx}][${p.filterIdx}].${p.attrKey} = "${p.attrValue}"`);
+}
+
+function facadeGetFilterAttribute() {
+    if (!cnn) { alert("Create network first"); return; }
+    const p = getFacadeParams();
+    const val = cnn.getFilterAttribute(p.layerIdx, p.filterIdx, p.attrKey);
+    facadeOutput(`Attribute [${p.layerIdx}][${p.filterIdx}].${p.attrKey} = "${val || '(not set)'}"`);
+}
+
+// ============== Init ==============
+randomizeImage();
+</script>
+</body>
+</html>
