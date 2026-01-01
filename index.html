@@ -1,15 +1,40 @@
+<!--
+MIT License
+
+Copyright (c) 2025 Matthew Abbott
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+-->
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>CNN Trainer with Facade</title>
+    <title>Facaded CNN</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 2rem; background: #fafafa; }
         .section { margin-bottom: 2rem; border-bottom: 1px solid #ccc; padding-bottom: 1rem; background: #fff; padding: 1rem; border-radius: 8px; }
         label { display: block; margin-top: 0.5rem; }
         input, select, textarea, button { margin: 0.5rem 0; }
-        button { padding: 8px 16px; cursor: pointer; background: #4285f4; color: white; border: none; border-radius: 4px; }
-        button:hover { background: #3367d6; }
+        button { padding: 8px 16px; cursor: pointer; background: #5a5a5a; color: white; border: none; border-radius: 0; }
+        button:hover { background: #4a4a4a; }
+        button:active { background: #3a3a3a; }
         button:disabled { background: #ccc; cursor: not-allowed; }
         .inline { display: inline-block; margin-right: 1rem; }
         .results { background-color: #f5f5f5; padding: 1rem; margin: 1rem 0; border-radius: 5px; }
@@ -39,7 +64,13 @@
     </style>
 </head>
 <body>
-<h1>🧠 CNN Trainer with Facade API</h1>
+<h1>Facaded CNN</h1>
+
+<!-- Network Architecture Visualization -->
+<div class="section">
+    <h2>Network Architecture</h2>
+    <div id="networkVisualization"></div>
+</div>
 
 <!-- Network Configuration -->
 <div class="section">
@@ -59,8 +90,9 @@
     <div class="inline"><label>Optimizer: <select id="optimizer"><option value="sgd">SGD</option><option value="adam" selected>Adam</option></select></label></div>
     <br><br>
     <button onclick="createNetwork()">Create Network</button>
-    <button onclick="saveModel()">Save Model</button>
-    <button onclick="loadModel()">Load Model</button>
+    <input type="file" id="importFile" accept=".json" onchange="importModel(event)" style="display:none">
+    <button onclick="document.getElementById('importFile').click()">Load Model (JSON)</button>
+    <button onclick="exportModel()">Save Model (JSON)</button>
     <span id="networkStatus" style="margin-left:1rem;"></span>
 </div>
 
@@ -102,7 +134,7 @@
 
 <!-- Facade API Explorer -->
 <div class="section facade-section">
-    <h2>🔧 CNN Facade API Explorer</h2>
+    <h2>CNN Facade API Explorer</h2>
     <p>Inspect and modify CNN internals:</p>
     
     <div class="facade-controls">
@@ -197,6 +229,357 @@
 </div>
 
 <script>
+/**
+ * Network Visualizer - SVG-based CNN architecture visualization
+ * Works with index.html, facaded_cnn.html, and cnn_player.html
+ */
+
+function visualizeNetworkArchitecture(cnn, containerId) {
+    if (!cnn) return;
+    
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    
+    // Calculate dimensions - compact version
+    const spacing = 85;
+    const padding = 20;
+    const legendSpace = 80; // Space for legend on the left
+    const neuronRadius = 3;
+    
+    const numConvLayers = cnn.convLayers?.length || 0;
+    const numPoolLayers = cnn.poolLayers?.length || 0;
+    const numFcLayers = cnn.fcLayers?.length || 0;
+    const totalLayers = 2 + numConvLayers + numPoolLayers + numFcLayers; // input + output + others
+    
+    const totalWidth = totalLayers * spacing + padding * 2 + legendSpace;
+    const totalHeight = 200;
+    
+    // Create SVG with scrollable container
+    const svgContainer = document.createElement('div');
+    svgContainer.setAttribute('style', 'overflow-x: auto; overflow-y: hidden; border: 1px solid #ccc; background: #fafafa; border-radius: 4px; margin: 1rem 0; height: 220px;');
+    
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', totalWidth);
+    svg.setAttribute('height', totalHeight);
+    svg.setAttribute('style', 'display: block;');
+    
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    defs.innerHTML = `
+        <linearGradient id="convGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#4285f4;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#1967d2;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="poolGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#34a853;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#188038;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="fcGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#ea4335;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#c5221f;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="outGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#fbbc04;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#f57d00;stop-opacity:1" />
+        </linearGradient>
+    `;
+    svg.appendChild(defs);
+    
+    let xPos = padding + legendSpace;
+    let layerIndex = 0;
+    
+    // Draw input layer
+    const inputNeurons = cnn.channels || 1;
+    drawInputLayer(svg, xPos, totalHeight / 2, inputNeurons, cnn.inputWidth, cnn.inputHeight);
+    xPos += spacing;
+    
+    // Draw conv and pool layers
+    if (cnn.convLayers && cnn.convLayers.length > 0) {
+        for (let i = 0; i < cnn.convLayers.length; i++) {
+            const filters = cnn.convFilters?.[i] || 1;
+            drawConvLayer(svg, xPos, totalHeight / 2, filters, i + 1, cnn.kernelSizes?.[i] || 3);
+            xPos += spacing;
+            
+            // Draw pool layer if exists
+            if (cnn.poolLayers && i < cnn.poolLayers.length) {
+                const poolSize = cnn.poolSizes?.[i] || 2;
+                drawPoolLayer(svg, xPos, totalHeight / 2, poolSize, i + 1);
+                xPos += spacing;
+            }
+        }
+    }
+    
+    // Draw FC layers
+    if (cnn.fcLayers && cnn.fcLayers.length > 0) {
+        for (let i = 0; i < cnn.fcLayers.length; i++) {
+            const neurons = cnn.fcSizes?.[i] || 128;
+            drawFCLayer(svg, xPos, totalHeight / 2, neurons, i + 1);
+            xPos += spacing;
+        }
+    }
+    
+    // Draw output layer
+    const outputNeurons = cnn.outputSize || 10;
+    drawOutputLayer(svg, xPos, totalHeight / 2, outputNeurons);
+    
+    // Draw legend vertically centered on the left
+    drawLegend(svg, padding + 5, totalHeight / 2 - 30);
+    
+    // Add SVG to scrollable container
+    svgContainer.innerHTML = '';
+    svgContainer.appendChild(svg);
+    
+    // Replace container content
+    container.innerHTML = '';
+    container.appendChild(svgContainer);
+}
+
+function drawInputLayer(svg, x, cy, channels, width, height) {
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    
+    // Draw box
+    const box = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    box.setAttribute('x', x - 25);
+    box.setAttribute('y', cy - 35);
+    box.setAttribute('width', 50);
+    box.setAttribute('height', 70);
+    box.setAttribute('fill', '#e8f5e9');
+    box.setAttribute('stroke', '#2e7d32');
+    box.setAttribute('stroke-width', 1.5);
+    box.setAttribute('rx', 3);
+    g.appendChild(box);
+    
+    // Draw text
+    const text1 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text1.setAttribute('x', x);
+    text1.setAttribute('y', cy - 18);
+    text1.setAttribute('text-anchor', 'middle');
+    text1.setAttribute('font-size', '10');
+    text1.setAttribute('font-weight', 'bold');
+    text1.setAttribute('fill', '#1b5e20');
+    text1.textContent = 'Input';
+    g.appendChild(text1);
+    
+    const text2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text2.setAttribute('x', x);
+    text2.setAttribute('y', cy + 2);
+    text2.setAttribute('text-anchor', 'middle');
+    text2.setAttribute('font-size', '9');
+    text2.setAttribute('fill', '#1b5e20');
+    text2.textContent = `${width}×${height}`;
+    g.appendChild(text2);
+    
+    const text3 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text3.setAttribute('x', x);
+    text3.setAttribute('y', cy + 15);
+    text3.setAttribute('text-anchor', 'middle');
+    text3.setAttribute('font-size', '9');
+    text3.setAttribute('fill', '#1b5e20');
+    text3.textContent = `ch:${channels}`;
+    g.appendChild(text3);
+    
+    svg.appendChild(g);
+}
+
+function drawConvLayer(svg, x, cy, filters, layerNum, kernelSize) {
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    
+    // Draw box
+    const box = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    box.setAttribute('x', x - 28);
+    box.setAttribute('y', cy - 35);
+    box.setAttribute('width', 56);
+    box.setAttribute('height', 70);
+    box.setAttribute('fill', 'url(#convGrad)');
+    box.setAttribute('stroke', '#1967d2');
+    box.setAttribute('stroke-width', 1.5);
+    box.setAttribute('rx', 3);
+    g.appendChild(box);
+    
+    // Draw text
+    const text1 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text1.setAttribute('x', x);
+    text1.setAttribute('y', cy - 18);
+    text1.setAttribute('text-anchor', 'middle');
+    text1.setAttribute('font-size', '9');
+    text1.setAttribute('font-weight', 'bold');
+    text1.setAttribute('fill', 'white');
+    text1.textContent = `C${layerNum}`;
+    g.appendChild(text1);
+    
+    const text2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text2.setAttribute('x', x);
+    text2.setAttribute('y', cy + 2);
+    text2.setAttribute('text-anchor', 'middle');
+    text2.setAttribute('font-size', '8');
+    text2.setAttribute('fill', 'white');
+    text2.textContent = `${filters}f`;
+    g.appendChild(text2);
+    
+    const text3 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text3.setAttribute('x', x);
+    text3.setAttribute('y', cy + 14);
+    text3.setAttribute('text-anchor', 'middle');
+    text3.setAttribute('font-size', '8');
+    text3.setAttribute('fill', 'white');
+    text3.textContent = `k${kernelSize}`;
+    g.appendChild(text3);
+    
+    svg.appendChild(g);
+}
+
+function drawPoolLayer(svg, x, cy, poolSize, layerNum) {
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    
+    // Draw box
+    const box = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    box.setAttribute('x', x - 23);
+    box.setAttribute('y', cy - 30);
+    box.setAttribute('width', 46);
+    box.setAttribute('height', 60);
+    box.setAttribute('fill', 'url(#poolGrad)');
+    box.setAttribute('stroke', '#188038');
+    box.setAttribute('stroke-width', 1.5);
+    box.setAttribute('rx', 3);
+    g.appendChild(box);
+    
+    // Draw text
+    const text1 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text1.setAttribute('x', x);
+    text1.setAttribute('y', cy - 12);
+    text1.setAttribute('text-anchor', 'middle');
+    text1.setAttribute('font-size', '9');
+    text1.setAttribute('font-weight', 'bold');
+    text1.setAttribute('fill', 'white');
+    text1.textContent = 'Pool';
+    g.appendChild(text1);
+    
+    const text2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text2.setAttribute('x', x);
+    text2.setAttribute('y', cy + 8);
+    text2.setAttribute('text-anchor', 'middle');
+    text2.setAttribute('font-size', '8');
+    text2.setAttribute('fill', 'white');
+    text2.textContent = `${poolSize}×${poolSize}`;
+    g.appendChild(text2);
+    
+    svg.appendChild(g);
+}
+
+function drawFCLayer(svg, x, cy, neurons, layerNum) {
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    
+    // Draw box
+    const boxHeight = 70;
+    const box = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    box.setAttribute('x', x - 25);
+    box.setAttribute('y', cy - boxHeight / 2);
+    box.setAttribute('width', 50);
+    box.setAttribute('height', boxHeight);
+    box.setAttribute('fill', 'url(#fcGrad)');
+    box.setAttribute('stroke', '#c5221f');
+    box.setAttribute('stroke-width', 1.5);
+    box.setAttribute('rx', 3);
+    g.appendChild(box);
+    
+    // Draw text
+    const text1 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text1.setAttribute('x', x);
+    text1.setAttribute('y', cy - 18);
+    text1.setAttribute('text-anchor', 'middle');
+    text1.setAttribute('font-size', '9');
+    text1.setAttribute('font-weight', 'bold');
+    text1.setAttribute('fill', 'white');
+    text1.textContent = `FC${layerNum}`;
+    g.appendChild(text1);
+    
+    const text2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text2.setAttribute('x', x);
+    text2.setAttribute('y', cy + 8);
+    text2.setAttribute('text-anchor', 'middle');
+    text2.setAttribute('font-size', '8');
+    text2.setAttribute('fill', 'white');
+    text2.textContent = `${neurons}`;
+    g.appendChild(text2);
+    
+    svg.appendChild(g);
+}
+
+function drawOutputLayer(svg, x, cy, neurons) {
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    
+    // Draw box
+    const boxHeight = 70;
+    const box = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    box.setAttribute('x', x - 28);
+    box.setAttribute('y', cy - boxHeight / 2);
+    box.setAttribute('width', 56);
+    box.setAttribute('height', boxHeight);
+    box.setAttribute('fill', 'url(#outGrad)');
+    box.setAttribute('stroke', '#f57d00');
+    box.setAttribute('stroke-width', 1.5);
+    box.setAttribute('rx', 3);
+    g.appendChild(box);
+    
+    // Draw text
+    const text1 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text1.setAttribute('x', x);
+    text1.setAttribute('y', cy - 18);
+    text1.setAttribute('text-anchor', 'middle');
+    text1.setAttribute('font-size', '10');
+    text1.setAttribute('font-weight', 'bold');
+    text1.setAttribute('fill', 'white');
+    text1.textContent = 'Output';
+    g.appendChild(text1);
+    
+    const text2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text2.setAttribute('x', x);
+    text2.setAttribute('y', cy + 8);
+    text2.setAttribute('text-anchor', 'middle');
+    text2.setAttribute('font-size', '8');
+    text2.setAttribute('fill', 'white');
+    text2.textContent = `${neurons}c`;
+    g.appendChild(text2);
+    
+    svg.appendChild(g);
+}
+
+function drawLegend(svg, x, y) {
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    
+    const items = [
+        { label: 'Conv', color: 'url(#convGrad)' },
+        { label: 'Pool', color: 'url(#poolGrad)' },
+        { label: 'FC', color: 'url(#fcGrad)' },
+        { label: 'Out', color: 'url(#outGrad)' }
+    ];
+    
+    let yOffset = y;
+    items.forEach(item => {
+        const box = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        box.setAttribute('x', x);
+        box.setAttribute('y', yOffset);
+        box.setAttribute('width', 10);
+        box.setAttribute('height', 10);
+        box.setAttribute('fill', item.color);
+        box.setAttribute('stroke', '#666');
+        box.setAttribute('stroke-width', 0.5);
+        box.setAttribute('rx', 2);
+        g.appendChild(box);
+        
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', x + 14);
+        text.setAttribute('y', yOffset + 8);
+        text.setAttribute('font-size', '9');
+        text.setAttribute('fill', '#333');
+        text.textContent = item.label;
+        g.appendChild(text);
+        
+        yOffset += 13;
+    });
+    
+    svg.appendChild(g);
+}
+
 // ============== CNNFacade Class (embedded) ==============
 </script>
 <script>class CNNFacade {
@@ -1194,18 +1577,113 @@
     }
 
     static fromJSON(json) {
+        // Handle both formats: direct properties and nested config
+        let cfg = json.config || json;
+        
+        // Support both camelCase and snake_case field names
+        let inputWidth = cfg.inputWidth || cfg.input_width || 28;
+        let inputHeight = cfg.inputHeight || cfg.input_height || 28;
+        let channels = cfg.channels || cfg.input_channels || 1;
+        let convFilters = cfg.convFilters || cfg.conv_filters || [16];
+        let kernelSizes = cfg.kernelSizes || cfg.kernel_sizes || [3];
+        let poolSizes = cfg.poolSizes || cfg.pool_sizes || [2];
+        let fcSizes = cfg.fcSizes || cfg.fcLayerSizes || cfg.fc_layer_sizes || [128];
+        let outputSize = cfg.outputSize || cfg.output_size || 10;
+        let learningRate = cfg.learningRate || cfg.learning_rate || 0.001;
+        let dropoutRate = cfg.dropoutRate || cfg.dropout_rate || 0.25;
+        let optimizer = cfg.optimizer || 'adam';
+        
+        // Ensure arrays
+        if (!Array.isArray(convFilters)) convFilters = [convFilters];
+        if (!Array.isArray(kernelSizes)) kernelSizes = [kernelSizes];
+        if (!Array.isArray(poolSizes)) poolSizes = [poolSizes];
+        if (!Array.isArray(fcSizes)) fcSizes = [fcSizes];
+        
         let cnn = new CNNFacade(
-            json.inputWidth, json.inputHeight, json.channels,
-            json.convFilters, json.kernelSizes, json.poolSizes,
-            json.fcSizes, json.outputSize, json.learningRate,
-            json.dropoutRate, json.optimizer
+            inputWidth, inputHeight, channels,
+            convFilters, kernelSizes, poolSizes,
+            fcSizes, outputSize, learningRate,
+            dropoutRate, optimizer
         );
         cnn.t = json.t || 0;
-        cnn.convLayers = json.convLayers;
-        cnn.fcLayers = json.fcLayers;
-        cnn.outputLayer = json.outputLayer;
-        cnn.batchNormParams = json.batchNormParams || [];
-        cnn.filterAttributes = json.filterAttributes || [];
+        
+        // Load conv layers - handle both conv_layers and convLayers
+        let convLayers = json.conv_layers || json.convLayers || [];
+        if (convLayers.length > 0) {
+            for (let i = 0; i < convLayers.length && i < cnn.convLayers.length; i++) {
+                let jl = convLayers[i];
+                if (jl.filters && Array.isArray(jl.filters)) {
+                    for (let f = 0; f < jl.filters.length && f < cnn.convLayers[i].filters.length; f++) {
+                        let jsonFilter = jl.filters[f];
+                        let netFilter = cnn.convLayers[i].filters[f];
+                        
+                        // Load weights
+                        if (jsonFilter.weights && Array.isArray(jsonFilter.weights)) {
+                            let weights = jsonFilter.weights;
+                            // Handle Pascal format: weights might be [1][channels][height][width]
+                            if (weights.length === 1 && Array.isArray(weights[0])) {
+                                netFilter.weights = JSON.parse(JSON.stringify(weights[0]));
+                            } else {
+                                netFilter.weights = JSON.parse(JSON.stringify(weights));
+                            }
+                        }
+                        
+                        // Load bias
+                        if (typeof jsonFilter.bias === 'number') netFilter.bias = jsonFilter.bias;
+                        if (typeof jsonFilter.biasM === 'number') netFilter.biasM = jsonFilter.biasM;
+                        if (typeof jsonFilter.biasV === 'number') netFilter.biasV = jsonFilter.biasV;
+                        
+                        // Load optimizer state
+                        if (jsonFilter.m && Array.isArray(jsonFilter.m)) netFilter.m = JSON.parse(JSON.stringify(jsonFilter.m));
+                        if (jsonFilter.v && Array.isArray(jsonFilter.v)) netFilter.v = JSON.parse(JSON.stringify(jsonFilter.v));
+                    }
+                }
+            }
+        }
+        
+        // Load FC layers
+        let fcLayers = json.fc_layers || json.fcLayers || [];
+        if (fcLayers.length > 0) {
+            for (let i = 0; i < fcLayers.length && i < cnn.fcLayers.length; i++) {
+                let jl = fcLayers[i];
+                if (jl.neurons && Array.isArray(jl.neurons)) {
+                    for (let n = 0; n < jl.neurons.length && n < cnn.fcLayers[i].neurons.length; n++) {
+                        let jsonNeuron = jl.neurons[n];
+                        let netNeuron = cnn.fcLayers[i].neurons[n];
+                        
+                        if (jsonNeuron.weights && Array.isArray(jsonNeuron.weights)) 
+                            netNeuron.weights = JSON.parse(JSON.stringify(jsonNeuron.weights));
+                        if (typeof jsonNeuron.bias === 'number') netNeuron.bias = jsonNeuron.bias;
+                        if (typeof jsonNeuron.biasM === 'number') netNeuron.biasM = jsonNeuron.biasM;
+                        if (typeof jsonNeuron.biasV === 'number') netNeuron.biasV = jsonNeuron.biasV;
+                        
+                        if (jsonNeuron.m && Array.isArray(jsonNeuron.m)) netNeuron.m = JSON.parse(JSON.stringify(jsonNeuron.m));
+                        if (jsonNeuron.v && Array.isArray(jsonNeuron.v)) netNeuron.v = JSON.parse(JSON.stringify(jsonNeuron.v));
+                    }
+                }
+            }
+        }
+        
+        // Load output layer
+        let outputLayer = json.output_layer || json.outputLayer || { neurons: [] };
+        if (outputLayer.neurons && Array.isArray(outputLayer.neurons)) {
+            for (let n = 0; n < outputLayer.neurons.length && n < cnn.outputLayer.neurons.length; n++) {
+                let jsonNeuron = outputLayer.neurons[n];
+                let netNeuron = cnn.outputLayer.neurons[n];
+                
+                if (jsonNeuron.weights && Array.isArray(jsonNeuron.weights)) 
+                    netNeuron.weights = JSON.parse(JSON.stringify(jsonNeuron.weights));
+                if (typeof jsonNeuron.bias === 'number') netNeuron.bias = jsonNeuron.bias;
+                if (typeof jsonNeuron.biasM === 'number') netNeuron.biasM = jsonNeuron.biasM;
+                if (typeof jsonNeuron.biasV === 'number') netNeuron.biasV = jsonNeuron.biasV;
+                
+                if (jsonNeuron.m && Array.isArray(jsonNeuron.m)) netNeuron.m = JSON.parse(JSON.stringify(jsonNeuron.m));
+                if (jsonNeuron.v && Array.isArray(jsonNeuron.v)) netNeuron.v = JSON.parse(JSON.stringify(jsonNeuron.v));
+            }
+        }
+        
+        cnn.batchNormParams = json.batchNormParams || json.batch_norm_params || [];
+        cnn.filterAttributes = json.filterAttributes || json.filter_attributes || [];
         return cnn;
     }
 }
@@ -1289,6 +1767,7 @@ function createNetwork() {
     for (let l of [...cnn.fcLayers, cnn.outputLayer]) for (let n of l.neurons) totalParams += n.weights.length + 1;
     
     document.getElementById("networkStatus").textContent = `CNN created! (${totalParams.toLocaleString()} params)`;
+    visualizeNetworkArchitecture(cnn, 'networkVisualization');
     randomizeImage();
 }
 
@@ -1452,21 +1931,60 @@ function visualizeInput() {
 }
 
 // ============== Model Persistence ==============
-function saveModel() {
-    if (!cnn) return;
-    localStorage.setItem('cnn_facade_model', JSON.stringify(cnn.toJSON()));
-    document.getElementById("networkStatus").textContent = "Model saved!";
+
+function exportModel() {
+    if (!cnn) {
+        console.log('exportModel: No CNN network created');
+        document.getElementById("networkStatus").textContent = "Error: Create network first!";
+        return;
+    }
+    console.log('exportModel() called');
+    const jsonData = cnn.toJSON();
+    const jsonStr = JSON.stringify(jsonData);
+    console.log('Exporting JSON of size:', jsonStr.length, 'bytes');
+    let blob = new Blob([jsonStr], { type: 'application/json' });
+    let url = URL.createObjectURL(blob);
+    let a = document.createElement('a');
+    a.href = url;
+    a.download = 'cnn_facade_model.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    document.getElementById("networkStatus").textContent = "Model exported!";
+    console.log('Model exported');
 }
 
-function loadModel() {
-    const saved = localStorage.getItem('cnn_facade_model');
-    if (!saved) { document.getElementById("networkStatus").textContent = "No saved model!"; return; }
-    try {
-        cnn = CNNFacade.fromJSON(JSON.parse(saved));
-        document.getElementById("networkStatus").textContent = "Model loaded!";
-    } catch(e) {
-        document.getElementById("networkStatus").textContent = "Error: " + e;
+function importModel(event) {
+    let file = event.target.files[0];
+    if (!file) {
+        console.log('importModel: No file selected');
+        return;
     }
+    console.log('importModel() called with file:', file.name, 'size:', file.size);
+    let reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            console.log('File read, content size:', e.target.result.length);
+            cnn = CNNFacade.fromJSON(JSON.parse(e.target.result));
+            console.log('Model imported successfully');
+            document.getElementById("imgWidth").value = cnn.inputWidth;
+            document.getElementById("imgHeight").value = cnn.inputHeight;
+            document.getElementById("imgChannels").value = cnn.channels;
+            document.getElementById("convFilters").value = cnn.convFilters.join(',');
+            document.getElementById("kernelSizes").value = cnn.kernelSizes.join(',');
+            document.getElementById("poolSizes").value = cnn.poolSizes.join(',');
+            document.getElementById("fcSizes").value = cnn.fcSizes.join(',');
+            document.getElementById("outputSize").value = cnn.outputSize;
+            document.getElementById("learningRate").value = cnn.learningRate;
+            document.getElementById("dropoutRate").value = cnn.dropoutRate;
+            document.getElementById("optimizer").value = cnn.optimizer;
+            document.getElementById("networkStatus").textContent = "Model imported from " + file.name + "! (Size: " + e.target.result.length + " bytes)";
+            visualizeNetworkArchitecture(cnn, 'networkVisualization');
+        } catch(e) {
+            console.error('Error importing model:', e);
+            document.getElementById("networkStatus").textContent = "Error importing: " + e.message;
+        }
+    };
+    reader.readAsText(file);
 }
 
 // ============== Facade UI ==============
